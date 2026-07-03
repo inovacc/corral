@@ -1,6 +1,6 @@
 # corral
 
-<!-- rev:002 -->
+<!-- rev:003 -->
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/inovacc/corral.svg)](https://pkg.go.dev/github.com/inovacc/corral)
 [![Test](https://github.com/inovacc/corral/actions/workflows/test.yml/badge.svg)](https://github.com/inovacc/corral/actions/workflows/test.yml)
@@ -8,7 +8,7 @@
 [![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8.svg)](https://go.dev/)
 
 > A provider-abstracted runtime for driving **subscription coding-agent CLIs**
-> (Claude Code, Codex, Antigravity, Grok, Kimi, Qwen) behind one interface —
+> (Claude Code, Codex, Antigravity, Grok, Kimi) behind one interface —
 > with a warm session pool, rate-limit awareness, and a per-host plugin
 > installer. Built on [mantle](https://github.com/inovacc/mantle).
 
@@ -30,7 +30,6 @@ standalone, reusable module.
 | `agy/`   | **Google Antigravity** | ConPTY pseudo-console (no headless mode) + warm Session (Windows) |
 | `grok/`  | **x.ai Grok**          | headless `grok --single` (mirrors Claude Code flags) |
 | `kimi/`  | **Moonshot Kimi Code** | headless `kimi --prompt` (auto-approve via `--yolo`) |
-| `qwen/`  | **Alibaba Qwen Code**  | headless `qwen --prompt` (gemini-cli fork; needs `--auth-type`) |
 | `all/`   | —                      | blank-imports every provider so they self-register |
 | `host/`  | —                      | multi-host plugin installer (Claude / Codex / Antigravity) |
 
@@ -62,7 +61,7 @@ import (
     "log"
 
     "github.com/inovacc/corral"
-    _ "github.com/inovacc/corral/all" // register every provider (claude/codex/agy/grok/kimi/qwen)
+    _ "github.com/inovacc/corral/all" // register every provider (claude/codex/agy/grok/kimi)
 )
 
 func main() {
@@ -78,7 +77,7 @@ func main() {
     })
 
     // 2. Open an Agency for a provider backend (by name) + a working dir.
-    ag, err := corral.NewAgency("claude", ".") // or codex / agy / grok / kimi / qwen
+    ag, err := corral.NewAgency("claude", ".") // or codex / agy / grok / kimi
     if err != nil {
         log.Fatal(err)
     }

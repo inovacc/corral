@@ -63,7 +63,7 @@ func (p *CLIProvider) argv(req RunRequest, schemaPath, outPath, prompt string) (
 	}
 	if prompt != "" {
 		if p.PromptFlag != "" {
-			args = append(args, p.PromptFlag, prompt) // prompt is this flag's value (grok --single, kimi/qwen --prompt)
+			args = append(args, p.PromptFlag, prompt) // prompt is this flag's value (grok --single, kimi --prompt)
 		} else {
 			args = append(args, prompt) // trailing positional (claude -p, codex exec)
 		}

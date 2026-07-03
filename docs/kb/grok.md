@@ -15,7 +15,7 @@
 
 ## HEADLINE — Grok DOES have a dedicated remote usage/billing REST call
 
-Unlike Qwen/gemini-cli, the `/usage` slash command ("View credit usage or manage billing") is backed by a **real remote fetch** in `crates/codegen/xai-grok-shell/src/extensions/billing.rs`. Two REST calls: **[M]**
+Unlike gemini-cli, the `/usage` slash command ("View credit usage or manage billing") is backed by a **real remote fetch** in `crates/codegen/xai-grok-shell/src/extensions/billing.rs`. Two REST calls: **[M]**
 
 - **`GET /billing?format=credits`** → "credits config" / billing data. Log line: `billing: fetched credits config`. **[M]**
 - **`GET /auto-topup-rule`** → auto top-up rule (min/max monthly top-up, enabled flag). **[M]**
@@ -89,7 +89,7 @@ Hard-stop / exhaustion signals actually emitted (measured strings): **[M]**
 
 ## corral UsageReporter plan (Grok provider)
 
-Grok, unlike Qwen, exposes a queryable usage endpoint — implement `Usage()` as a **direct remote GET**:
+Grok exposes a queryable usage endpoint — implement `Usage()` as a **direct remote GET**:
 
 1. **Load creds.** Read `~/.grok/auth.json`; take `access_token` + `user_id`. If absent, fall back to `XAI_API_KEY` env (BYOK). If `expires_at` is past, corral should treat as stale (Grok itself silent-refreshes via `refresh_token` against `auth.x.ai`; corral can either reuse the token until 401 or re-run `grok login`). **[M]**
 2. **Resolve base URL.** `GROK_CLI_CHAT_PROXY_BASE_URL` if set, else `https://cli-chat-proxy.grok.com/v1`. **[M]**

@@ -10,7 +10,7 @@ import (
 // TestProvidersRegistered asserts the barrel import wired every vendor provider
 // into the core registry — the contract the rest of the runtime relies on.
 func TestProvidersRegistered(t *testing.T) {
-	for _, name := range []string{"codex", "claude", "code", "agy", "antigravity", "grok", "xai", "kimi", "moonshot", "qwen"} {
+	for _, name := range []string{"codex", "claude", "code", "agy", "antigravity", "grok", "xai", "kimi", "moonshot"} {
 		if _, err := corral.ProviderByName(name); err != nil {
 			t.Errorf("provider %q not registered: %v", name, err)
 		}

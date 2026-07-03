@@ -22,7 +22,7 @@
 
 ## HEADLINE — Kimi HAS a dedicated remote usage/quota endpoint
 
-Unlike Qwen/gemini-cli, Kimi Code polls a real quota service. The whole path is captured below.
+Unlike gemini-cli, Kimi Code polls a real quota service. The whole path is captured below.
 
 ## The usage/quota call (measured)
 
@@ -107,7 +107,7 @@ Each row is normalized by `toUsageRow(raw)`:
 
 ⇒ **The "approaching limit" trigger corral should mirror is `used/limit ≥ 0.85` (hard warn) with a soft warn at
 `≥ 0.50`.** There is a live server-side `limit`+`used`/`remaining`, so this is a real proactive threshold (no need for
-a client-side budget guess, unlike Qwen). Context-window usage is a separate local meter (`contextTokens/maxContextTokens`),
+a client-side budget guess). Context-window usage is a separate local meter (`contextTokens/maxContextTokens`),
 not part of `/usages`. **[M]**
 
 ## ACP support

@@ -1,16 +1,15 @@
 # Provider Usage Calls — Cross-Provider Reference
 
-<!-- rev:001 -->
+<!-- rev:002 -->
 
-Index + synthesis for the six-provider usage/quota KB in this directory. Each
+Index + synthesis for the five-provider usage/quota KB in this directory. Each
 provider page documents the one call corral makes to feed a
 `corral.UsageReporter`; this README compares them, maps each onto the
 vendor-neutral `corral.LimitStatus`, and specifies the background Monitor that
 polls them and fires threshold alerts.
 
 Source pages: [`claude-codex-agy.md`](./claude-codex-agy.md) (Claude Code,
-Codex, Antigravity), [`grok.md`](./grok.md), [`kimi.md`](./kimi.md),
-[`qwen.md`](./qwen.md).
+Codex, Antigravity), [`grok.md`](./grok.md), and [`kimi.md`](./kimi.md).
 
 ---
 
@@ -23,7 +22,6 @@ Codex, Antigravity), [`grok.md`](./grok.md), [`kimi.md`](./kimi.md),
 | **Antigravity** | antigravity CLI 1.0.11 (Google Code Assist) · Go impl `agy/usage.go` | `POST {base}/v1internal:retrieveUserQuotaSummary` (`daily-cloudcode-pa.googleapis.com`) | `~/.gemini/oauth_creds.json` (shared w/ gemini-cli; **lacks** Antigravity-Pro entitlement → 403) | derived from `remainingFraction` **or** `consumed`/`limit` **or** `remainingAmount`/`limit`; `resetTime`/`resetAt` | derived `UsedPercent`; Worst ≥ 98 | n/d |
 | **Grok** | `grok.exe`/`agent.exe` (byte-identical) · clap Rust PE ~128 MiB · v0.2.82 | `GET cli-chat-proxy.grok.com/v1/billing?format=credits` (+ `/auto-topup-rule`) | `~/.grok/auth.json` (`access_token`+`user_id`; else `XAI_API_KEY` BYOK) | raw counters only: `includedUsed`, `totalUsed`, `on_demand_enabled`, `billingCycle.periodEnd`, `subscription_tier` — **no** `remaining`/`percent` | client-computed; alert 80/90% of allowance; hard stop = "spending cap"/"subscription required"/401 | **Yes** — ACP v0.6.0, `grok agent stdio` |
 | **Kimi** | `kimi.exe` · Bun-compiled PE (Node v24.15.0) ~120 MiB · v0.22.2 | `GET api.kimi.com/coding/v1/usages` (managed plan only; BYO key 404s) | `~/.kimi-code/credentials/` (key `oauth/kimi-code-env-<sha256>`, field `access_token`) | `limit`, `used` (or `remaining`→`limit−remaining`); `window{duration,timeUnit}`; reset `reset_at`/`resetAt`/`reset_time`/`resetTime` or `reset_in`/`ttl`/`window` | server `used`+`limit` → ratio; `ratioSeverity` ≥ 0.85 danger, ≥ 0.50 warn | **Yes** — `kimi acp` (stdio) |
-| **Qwen** | `@qwen-code/qwen-code` Node ESM bundle (esbuild chunks) · v0.19.6 (gemini-cli fork) | **none** — no remote usage/quota GET; local token accounting + reactive 429 | `~/.qwen/oauth_creds.json` (or env `DASHSCOPE_API_KEY`/`BAILIAN_*`) | API returns **no** limit/remaining; only `usage.{prompt,completion,total}_tokens` locally; reset from `Retry-After`/`retry-after-ms` on 429 | client-side `used/configured_budget`; alert 80/90%; reactive 429 = exhausted | **Yes** — `--acp`, `runAcpAgent()` |
 
 ACP column for Claude/Codex/Antigravity is *n/d* because `claude-codex-agy.md`
 scopes strictly to the usage call and does not document those CLIs' ACP surface.
@@ -62,19 +60,17 @@ constraint is the worst per-window ratio. Providers split into two families by
 | Codex | `float64(used_percent)` | `5h`,`weekly` | `time.Unix(reset_at)` else `now+reset_after_seconds` | `plan_type` / `wham/usage` |
 | Antigravity | `1−remainingFraction`×100, else `consumed/limit`×100 | one per quota bucket (`displayName`/`name`/`quotaId`) | `resetTime`/`resetAt` | `"antigravity"` / `retrieveUserQuotaSummary` |
 
-**B. Server returns raw counters or nothing** (corral computes the percent):
+**B. Server returns raw counters** (corral computes the percent):
 
 | Provider | Compute `UsedPercent` | `ResetsAt` | Notes |
 |---|---|---|---|
 | Kimi | `used / limit × 100` (`used = used ?? limit−remaining`) per row | `reset_*` abs, else `reset_in`/`ttl`/`window` sec | matches native `ratioSeverity` (0.85/0.50) |
 | Grok | `includedUsed / includedAllowance × 100` (+ pay-as-you-go `used/limit` when `on_demand_enabled`) | `billingCycle.periodEnd` | no server percent; allowance is the denominator |
-| Qwen | `localTotalTokens / configuredBudget × 100` | `Retry-After` on 429 | no server counter at all; budget is corral config |
 
 Family A snapshots are authoritative; Family B synthesizes `UsedPercent` so the
 *same* `Worst()`-vs-threshold gate works uniformly. Kimi's server-side
 `used`+`limit` makes it a *real* proactive percent; Grok has real counters but
-no precomputed ratio; Qwen has no server signal and only learns it is over at
-the 429.
+no precomputed ratio.
 
 ---
 
@@ -119,14 +115,9 @@ type MonitorConfig struct {
    reads by the Agency between polls.
 
 **Cadence by family.** Remote-GET providers (Claude, Codex, Antigravity, Grok,
-Kimi) are polled on the ticker with per-call timeout + error backoff. Qwen is
-**reactive**: it has no endpoint to poll, so its `Usage()` returns a
-`LimitStatus` built from the *local* token counter (`usageHistoryService`-style
-accumulation) against the configured budget, and its `ResetsAt` is refreshed
-from `Retry-After` when a chat call 429s. The Monitor treats it identically —
-it just never issues a network request for that provider. Codex additionally
-falls back to its persisted `/responses` rate-limit headers (`ReadUsage()`)
-when the live fetch fails, so its snapshot survives an air-gap.
+Kimi) are polled on the ticker with per-call timeout + error backoff. Codex
+additionally falls back to its persisted `/responses` rate-limit headers
+(`ReadUsage()`) when the live fetch fails, so its snapshot survives an air-gap.
 
 Alert transport is orthogonal (log line, notifier, TUI banner); the Monitor's
 job is only headroom computation + edge detection at `AlertThreshold`, with the
@@ -143,7 +134,6 @@ job is only headroom computation + edge detection at `AlertThreshold`, with the
 | Antigravity | **Done** | `agy/usage.go` — POST quota RPC, tolerant bucket walk |
 | **Grok** | **TODO** | plan in `grok.md` §"corral UsageReporter plan" — direct GET `/billing?format=credits`, compute percent from `includedUsed`/allowance |
 | **Kimi** | **TODO** | plan in `kimi.md` §"corral UsageReporter plan" — single GET `/usages`, `used/limit` ratio (mirror `ratioSeverity`) |
-| **Qwen** | **TODO** | plan in `qwen.md` §"corral UsageReporter plan" — local + reactive (no remote GET); track `total_tokens` vs configured budget |
 
-Grok/Kimi/Qwen have measured, HIGH-confidence KB plans ready to implement;
+Grok/Kimi have measured, HIGH-confidence KB plans ready to implement;
 only their corral `Usage()` code is outstanding.

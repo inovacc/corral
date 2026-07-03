@@ -1,6 +1,6 @@
 # Architecture
 
-<!-- rev:001 -->
+<!-- rev:002 -->
 
 corral is a provider-abstracted runtime that drives subscription coding-agent
 CLIs behind one `Provider` interface. The consumer supplies the agent roster
@@ -17,7 +17,7 @@ name. `NewAgency` resolves the provider from the registry (populated by the
 `all/` barrel), pairs it with the roster, and — when the provider can open warm
 sessions — wraps it in a `SessionPool`. Each turn flows through the rate-limit
 gate into either a warm session or a one-shot `Run`, and finally to a backend:
-the shared `CLIProvider` headless exec (codex, claude, grok, kimi, qwen) or the
+the shared `CLIProvider` headless exec (codex, claude, grok, kimi) or the
 agy ConPTY pseudo-console.
 
 ```mermaid
@@ -50,13 +50,11 @@ flowchart TB
         claude["claude\nclaude -p"]
         grok["grok\ngrok --single"]
         kimi["kimi\nkimi --prompt"]
-        qwen["qwen\nqwen --prompt"]
         agy["agy\nConPTY warm Session\n(Windows-only)"]
         codex --- cli
         claude --- cli
         grok --- cli
         kimi --- cli
-        qwen --- cli
     end
 
     consumer -->|Register agents| reg
@@ -68,7 +66,7 @@ flowchart TB
     gate -->|else Provider.Run| cli
     pool -->|Open / reuse| cli
     pool -->|Open warm ConPTY| agy
-    cli --> codex & claude & grok & kimi & qwen
+    cli --> codex & claude & grok & kimi
 ```
 
 ## Agent Turn
@@ -145,11 +143,10 @@ flowchart LR
         i_agy["agy.init()"]
         i_grok["grok.init()"]
         i_kimi["kimi.init()"]
-        i_qwen["qwen.init()"]
     end
 
     subgraph barrel["all/ barrel (all.go)"]
-        b["blank-import _ agy/claude/codex/grok/kimi/qwen"]
+        b["blank-import _ agy/claude/codex/grok/kimi"]
     end
 
     reg["RegisterProvider(factory, names...)\nprovFactories map (providers.go)"]
@@ -159,7 +156,6 @@ flowchart LR
     i_agy -->|'agy','antigravity'| reg
     i_grok -->|'grok','xai'| reg
     i_kimi -->|'kimi','kimi-code','moonshot'| reg
-    i_qwen -->|'qwen','qwen-code'| reg
 
     b -.triggers init().-> inits
     consumer["Consumer: import _ .../all"] --> b

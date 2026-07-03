@@ -1,6 +1,6 @@
 # Features
 
-<!-- rev:001 -->
+<!-- rev:002 -->
 
 `corral` is a provider-abstracted runtime that drives subscription coding-agent
 CLIs behind one `Provider` interface. This document tracks shipped capabilities
@@ -8,7 +8,7 @@ and proposed work.
 
 ## Completed
 
-- **Provider abstraction** — one `Provider` interface (`provider.go`) with six
+- **Provider abstraction** — one `Provider` interface (`provider.go`) with five
   self-registering backends, each blank-imported through `all/`:
   - `claude/` — Anthropic Claude Code, headless `claude -p`.
   - `codex/` — OpenAI Codex, headless `codex exec --output-schema` with
@@ -18,8 +18,6 @@ and proposed work.
   - `grok/` — x.ai Grok, headless `grok --single <prompt>` (aliases `xai`).
   - `kimi/` — Moonshot Kimi Code, headless `kimi --prompt <prompt> --yolo`
     (aliases `kimi-code`, `moonshot`).
-  - `qwen/` — Alibaba Qwen Code, headless `qwen --prompt <prompt> --yolo`,
-    a gemini-cli fork requiring `--auth-type` (aliases `qwen-code`).
 - **Warm SessionPool** (`session.go`) — reuses live agent sessions to avoid
   cold-start cost per turn.
 - **Caller-supplied roster** (`registry.go`) — `Register`/`All`/`ByName`; the
@@ -42,7 +40,7 @@ and proposed work.
 
 ## Proposed
 
-- `UsageReporter` + `usage.go` for `grok`, `kimi`, and `qwen`.
+- `UsageReporter` + `usage.go` for `grok` and `kimi`.
 - Rate-limit backpressure — concurrency gating in `checkLimit` when a provider
   nears exhaustion.
 - Pluggable `UsageSink` for persisting `LimitStatus` snapshots.

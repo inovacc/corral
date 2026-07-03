@@ -1,6 +1,6 @@
 # Milestones
 
-<!-- rev:001 -->
+<!-- rev:002 -->
 
 Version milestones for **Corral** — a provider-abstracted runtime that drives
 subscription coding-agent CLIs behind one `Provider` interface, with a warm
@@ -17,7 +17,7 @@ as a public module.
 - Agent runtime extracted from `pixkb/pkg/agents` into a standalone module.
 - Branded `agents` → `corral`; published at `github.com/inovacc/corral`
   (public, BSD-3-Clause).
-- Six provider backends, each self-registering via `init()` and blank-imported
+- Five provider backends, each self-registering via `init()` and blank-imported
   through `all/`:
   - `claude/` — Anthropic Claude Code, headless `claude -p` (+ `UsageReporter`).
   - `codex/` — OpenAI Codex, headless `codex exec --output-schema`
@@ -27,8 +27,6 @@ as a public module.
   - `grok/` — x.ai Grok, headless `grok --single <prompt>` (aliases `xai`).
   - `kimi/` — Moonshot Kimi Code, headless `kimi --prompt <prompt> --yolo`
     (aliases `kimi-code`, `moonshot`).
-  - `qwen/` — Alibaba Qwen Code, headless `qwen --prompt <prompt> --yolo`,
-    gemini-cli fork (aliases `qwen-code`).
 - Generalized `CLIProvider` with `PromptFlag` + oversized-prompt stdin fallback.
 - Single external dependency: `github.com/UserExistsError/conpty`.
 - Test coverage: **61.2%**.
@@ -38,7 +36,7 @@ as a public module.
 Usage-reporting parity across all providers, session resilience, and a coverage
 lift toward the 80% target.
 
-- `UsageReporter` + `usage.go` for `grok/`, `kimi/`, and `qwen/` (currently
+- `UsageReporter` + `usage.go` for `grok/` and `kimi/` (currently
   none).
 - `SessionPool` exponential backoff + attempt cap.
 - `checkLimit` concurrency backpressure.

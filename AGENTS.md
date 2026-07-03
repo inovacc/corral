@@ -1,10 +1,10 @@
 # AGENTS.md
-<!-- rev:001 -->
+<!-- rev:002 -->
 
 Canonical cross-tool contributor and agent instructions for **corral**
 (`github.com/inovacc/corral`) — a provider-abstracted Go runtime that drives
-subscription coding-agent CLIs (Claude Code, Codex, Antigravity, Grok, Kimi,
-Qwen) behind one `Provider` interface, with a warm `SessionPool`, rate-limit
+subscription coding-agent CLIs (Claude Code, Codex, Antigravity, Grok, Kimi)
+behind one `Provider` interface, with a warm `SessionPool`, rate-limit
 awareness, a pluggable provider registry, and a per-host plugin installer. The
 agent roster is caller-supplied; the library ships the machinery. Go 1.26.3,
 BSD-3-Clause, single external runtime dep (`github.com/UserExistsError/conpty`).
@@ -65,7 +65,7 @@ Enabled linters: `errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`,
 3. **Blank-import in `all/all.go`:** add
    `_ "github.com/inovacc/corral/<vendor>"` so the barrel populates the registry.
 4. **Wire the prompt:** headless CLIs that take the prompt as a flag set
-   `PromptFlag` (e.g. grok `--single`, kimi/qwen `--prompt`); otherwise the
+   `PromptFlag` (e.g. grok `--single`, kimi `--prompt`); otherwise the
    prompt is passed positionally. Oversized prompts fall back to stdin
    automatically (`cli.go`). `SchemaFlag` empty means embed the schema in the
    prompt and parse JSON from stdout.
@@ -75,7 +75,7 @@ Enabled linters: `errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`,
 - **No secrets in-repo.** Never commit tokens, cookies, or `.env` files.
 - Each backend CLI authenticates via its **own config/login** (e.g.
   `~/.claude/.credentials.json`, `codex` login, `grok login`, Moonshot
-  subscription, `qwen --auth-type`). corral reads those credentials read-only;
+  subscription). corral reads those credentials read-only;
   it never stores or transmits them elsewhere.
 - `UsageReporter` calls hit each vendor's own usage endpoint with the CLI's
   existing bearer; absence of login is reported as `(nil, nil)`, never fatal.
