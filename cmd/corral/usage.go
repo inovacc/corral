@@ -34,8 +34,8 @@ func newUsageCmd() *cobra.Command {
 			default:
 				return fmt.Errorf("name a provider or pass --all (registered: %s)", strings.Join(canonicalProviders(), ", "))
 			}
-			printUsage(cmd.OutOrStdout(), names)
-			return nil
+			_, err := io.WriteString(cmd.OutOrStdout(), renderUsage(names))
+			return err
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "show every registered provider")
@@ -67,9 +67,9 @@ type usageResult struct {
 	noEP bool
 }
 
-// printUsage queries each provider concurrently and prints a block per provider,
-// preserving the requested order.
-func printUsage(w io.Writer, names []string) {
+// renderUsage queries each provider concurrently and returns a text block per
+// provider, preserving the requested order.
+func renderUsage(names []string) string {
 	results := make([]usageResult, len(names))
 	var wg sync.WaitGroup
 	for i, name := range names {
@@ -93,29 +93,31 @@ func printUsage(w io.Writer, names []string) {
 	}
 	wg.Wait()
 
+	var b strings.Builder
 	for _, r := range results {
 		switch {
 		case r.err != nil:
-			fmt.Fprintf(w, "%-8s  ! %v\n", r.name, r.err)
+			b.WriteString(fmt.Sprintf("%-8s  ! %v\n", r.name, r.err))
 		case r.noEP:
-			fmt.Fprintf(w, "%-8s  - no queryable usage endpoint\n", r.name)
+			b.WriteString(fmt.Sprintf("%-8s  - no queryable usage endpoint\n", r.name))
 		case r.st == nil:
-			fmt.Fprintf(w, "%-8s  - no data (not logged in?)\n", r.name)
+			b.WriteString(fmt.Sprintf("%-8s  - no data (not logged in?)\n", r.name))
 		default:
 			plan := r.st.Plan
 			if plan == "" {
 				plan = "?"
 			}
-			fmt.Fprintf(w, "%s  (plan %s)\n", r.name, plan)
+			b.WriteString(fmt.Sprintf("%s  (plan %s)\n", r.name, plan))
 			for _, win := range r.st.Windows {
 				reset := ""
 				if !win.ResetsAt.IsZero() {
 					reset = "  resets " + win.ResetsAt.Local().Format("Mon 02 Jan 15:04")
 				}
-				fmt.Fprintf(w, "   %-16s %s %5.1f%%%s\n", win.Name, bar(win.UsedPercent), win.UsedPercent, reset)
+				b.WriteString(fmt.Sprintf("   %-16s %s %5.1f%%%s\n", win.Name, bar(win.UsedPercent), win.UsedPercent, reset))
 			}
 		}
 	}
+	return b.String()
 }
 
 // bar renders a fixed-width headroom bar for a used-percent in 0..100.
