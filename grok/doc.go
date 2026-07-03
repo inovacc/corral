@@ -11,7 +11,10 @@
 // Auth: `grok login` (subscription); config under ~/.grok (config.toml, OAuth).
 // Verified against grok 0.2.82.
 //
-// Usage/quota monitoring (corral.UsageReporter) is not yet wired — Grok's quota
-// lives behind the grok.com gateway; add a usage.go once the endpoint is
-// confirmed.
+// Usage/quota monitoring (corral.UsageReporter) is wired via usage.go: the real
+// GET /billing?format=credits the CLI's `/usage` command makes, authenticated
+// with the session token in ~/.grok/auth.json (or the XAI_API_KEY BYOK env).
+// Grok returns raw credit counters with no server-side percent, so a percent is
+// derived only when the response carries an included-credit allowance; otherwise
+// usage is surfaced with the percent unknown. See docs/kb/grok.md.
 package grok
