@@ -7,3 +7,4 @@ dist/
 
 # stray build artifacts
 *.exe
+config.yaml

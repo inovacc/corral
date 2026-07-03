@@ -30,6 +30,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	root.AddCommand(newUsageCmd())
+
 	root.RunE = func(cmd *cobra.Command, _ []string) error {
 		return bootstrap.Run(cmd, func(ctx context.Context, rt *bootstrap.Runtime) error {
 			cfg := bootstrap.ConfigOf[*app.App](rt)
