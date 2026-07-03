@@ -21,7 +21,10 @@ standalone, reusable module.
 | `claude/`| **Anthropic Claude Code** | headless `claude -p` |
 | `codex/` | **OpenAI Codex**       | headless `codex exec` (`--output-schema`) + rate-limit usage tracking + upstream drift pinning |
 | `agy/`   | **Google Antigravity** | ConPTY pseudo-console (no headless mode) + warm Session (Windows) |
-| `all/`   | —                      | blank-imports the three so they self-register |
+| `grok/`  | **x.ai Grok**          | headless `grok --single` (mirrors Claude Code flags) |
+| `kimi/`  | **Moonshot Kimi Code** | headless `kimi --prompt` (auto-approve via `--yolo`) |
+| `qwen/`  | **Alibaba Qwen Code**  | headless `qwen --prompt` (gemini-cli fork; needs `--auth-type`) |
+| `all/`   | —                      | blank-imports every provider so they self-register |
 | `host/`  | —                      | multi-host plugin installer (Claude / Codex / Antigravity) |
 
 ## Core types

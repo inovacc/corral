@@ -23,6 +23,7 @@ type CLIProvider struct {
 	OutputFlag   string   // flag taking an output file (e.g. "-o"); "" => read stdout
 	ModelFlag    string   // flag selecting the model (e.g. "--model"); "" => no flag emitted
 	Model        string   // default model used when an Agent sets none (e.g. "claude-sonnet-4-6")
+	PromptFlag   string   // flag carrying the prompt as its VALUE (e.g. "--single","--prompt"); "" => prompt is a trailing positional arg
 }
 
 func (p *CLIProvider) Name() string { return p.ProviderName }
@@ -61,7 +62,11 @@ func (p *CLIProvider) argv(req RunRequest, schemaPath, outPath, prompt string) (
 		}
 	}
 	if prompt != "" {
-		args = append(args, prompt)
+		if p.PromptFlag != "" {
+			args = append(args, p.PromptFlag, prompt) // prompt is this flag's value (grok --single, kimi/qwen --prompt)
+		} else {
+			args = append(args, prompt) // trailing positional (claude -p, codex exec)
+		}
 	}
 	return args, fromFile
 }
