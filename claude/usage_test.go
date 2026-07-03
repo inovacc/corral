@@ -67,6 +67,48 @@ func TestReadUsageRealCall(t *testing.T) {
 	}
 }
 
+// TestReadUsageLimitsArray covers the current API shape: the generic limits[]
+// array, which carries the per-model ("scoped") weekly window (e.g. Fable) that
+// the legacy top-level fields omit. limits[] must be preferred over the legacy
+// fields when both are present.
+func TestReadUsageLimitsArray(t *testing.T) {
+	future := time.Now().Add(time.Hour).UnixMilli()
+	writeCreds(t, `{"claudeAiOauth":{"accessToken":"tok-abc","expiresAt":`+itoa(future)+`,"subscriptionType":"max"}}`)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"five_hour":{"utilization":4,"resets_at":"2026-07-04T03:20:00Z"},
+			"limits":[
+				{"group":"session","kind":"session","percent":4,"resets_at":"2026-07-04T03:20:00Z","severity":"normal"},
+				{"group":"weekly","kind":"weekly_all","percent":100,"resets_at":"2026-07-08T09:00:00Z","severity":"critical"},
+				{"group":"weekly","kind":"weekly_scoped","percent":49,"resets_at":"2026-07-08T09:00:00Z","scope":{"model":{"display_name":"Fable"}},"severity":"normal"}
+			]}`))
+	}))
+	defer srv.Close()
+	usageBaseURL = srv.URL
+	defer func() { usageBaseURL = "https://api.anthropic.com" }()
+
+	s, err := ReadUsage(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Windows) != 3 {
+		t.Fatalf("windows = %d, want 3 (limits[] preferred over the legacy five_hour)", len(s.Windows))
+	}
+	got := map[string]float64{}
+	for _, w := range s.Windows {
+		got[w.Name] = w.UsedPercent
+	}
+	for name, want := range map[string]float64{"5h": 4, "weekly": 100, "weekly-Fable": 49} {
+		if got[name] != want {
+			t.Errorf("window %q = %v%%, want %v%% (all windows: %+v)", name, got[name], want, got)
+		}
+	}
+	if s.Worst() != 100 {
+		t.Errorf("worst = %v, want 100", s.Worst())
+	}
+}
+
 func TestReadUsageExpiredToken(t *testing.T) {
 	past := time.Now().Add(-time.Minute).UnixMilli()
 	writeCreds(t, `{"claudeAiOauth":{"accessToken":"tok","expiresAt":`+itoa(past)+`}}`)

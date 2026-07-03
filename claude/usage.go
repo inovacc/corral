@@ -97,17 +97,59 @@ func keychainCreds() ([]byte, error) {
 	return []byte(strings.TrimSpace(string(out))), nil
 }
 
-// apiWindow is one window in the /api/oauth/usage response.
+// apiWindow is a legacy top-level window in the /api/oauth/usage response.
 type apiWindow struct {
 	Utilization *float64 `json:"utilization"` // percent used, 0..100
 	ResetsAt    *string  `json:"resets_at"`   // ISO-8601
 }
 
+// apiLimit is one entry in the response's generic limits[] array — the
+// forward-compatible source of truth. Unlike the legacy top-level fields it also
+// carries per-model ("scoped") weekly windows (e.g. Fable/Opus) and any windows
+// Anthropic adds later.
+type apiLimit struct {
+	Group    string   `json:"group"`   // "session" | "weekly" | ...
+	Kind     string   `json:"kind"`    // "session" | "weekly_all" | "weekly_scoped" | ...
+	Percent  *float64 `json:"percent"` // 0..100
+	ResetsAt *string  `json:"resets_at"`
+	Severity string   `json:"severity"` // "normal" | "critical" | ...
+	Scope    *struct {
+		Model *struct {
+			DisplayName string `json:"display_name"`
+		} `json:"model"`
+	} `json:"scope"`
+}
+
 // apiUsage is the /api/oauth/usage response body.
 type apiUsage struct {
+	Limits       []apiLimit `json:"limits"` // preferred: generic per-window array
 	FiveHour     *apiWindow `json:"five_hour"`
 	SevenDay     *apiWindow `json:"seven_day"`
 	SevenDayOpus *apiWindow `json:"seven_day_opus"`
+}
+
+// limitName gives a stable, human window name for a limits[] entry, folding the
+// per-model scope into the label (e.g. weekly_scoped + "Fable" -> "weekly-Fable").
+func limitName(l apiLimit) string {
+	switch l.Kind {
+	case "session":
+		return "5h"
+	case "weekly_all":
+		return "weekly"
+	case "weekly_scoped":
+		if l.Scope != nil && l.Scope.Model != nil && l.Scope.Model.DisplayName != "" {
+			return "weekly-" + l.Scope.Model.DisplayName
+		}
+		return "weekly-scoped"
+	}
+	switch {
+	case l.Group != "" && l.Kind != "" && l.Group != l.Kind:
+		return l.Group + "-" + l.Kind
+	case l.Kind != "":
+		return l.Kind
+	default:
+		return l.Group
+	}
 }
 
 // ReadUsage performs the real Claude Code subscription-usage call:
@@ -153,21 +195,40 @@ func ReadUsage(ctx context.Context) (*corral.LimitStatus, error) {
 	if c.SubscriptionType != nil {
 		s.Plan = *c.SubscriptionType
 	}
-	add := func(name string, w *apiWindow) {
-		if w == nil || w.Utilization == nil {
-			return
-		}
-		win := corral.LimitWindow{Name: name, UsedPercent: *w.Utilization}
-		if w.ResetsAt != nil {
-			if t, perr := time.Parse(time.RFC3339, *w.ResetsAt); perr == nil {
-				win.ResetsAt = t
+	parseReset := func(iso *string) time.Time {
+		if iso != nil {
+			if t, perr := time.Parse(time.RFC3339, *iso); perr == nil {
+				return t
 			}
 		}
-		s.Windows = append(s.Windows, win)
+		return time.Time{}
 	}
-	add("5h", u.FiveHour)
-	add("weekly", u.SevenDay)
-	add("weekly-opus", u.SevenDayOpus)
+	// Prefer the generic limits[] array: it includes the per-model ("scoped")
+	// weekly windows (e.g. Fable) that the legacy top-level fields omit.
+	for _, l := range u.Limits {
+		if l.Percent == nil {
+			continue
+		}
+		s.Windows = append(s.Windows, corral.LimitWindow{
+			Name:        limitName(l),
+			UsedPercent: *l.Percent,
+			ResetsAt:    parseReset(l.ResetsAt),
+		})
+	}
+	if len(s.Windows) == 0 {
+		// Fallback for older API shapes without limits[].
+		add := func(name string, w *apiWindow) {
+			if w == nil || w.Utilization == nil {
+				return
+			}
+			s.Windows = append(s.Windows, corral.LimitWindow{
+				Name: name, UsedPercent: *w.Utilization, ResetsAt: parseReset(w.ResetsAt),
+			})
+		}
+		add("5h", u.FiveHour)
+		add("weekly", u.SevenDay)
+		add("weekly-opus", u.SevenDayOpus)
+	}
 	if len(s.Windows) == 0 {
 		return nil, nil
 	}
