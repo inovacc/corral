@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/inovacc/agents"
+	"github.com/inovacc/corral"
 )
 
 // usageBaseURL is the Anthropic API base. Overridable in tests; in production it
@@ -113,8 +113,8 @@ type apiUsage struct {
 // ReadUsage performs the real Claude Code subscription-usage call:
 // GET /api/oauth/usage with the OAuth bearer from the CLI's own credentials,
 // exactly as the `/usage` and `/status` slash commands do. Returns the
-// vendor-neutral agents.LimitStatus, or nil when not logged in via subscription.
-func ReadUsage(ctx context.Context) (*agents.LimitStatus, error) {
+// vendor-neutral corral.LimitStatus, or nil when not logged in via subscription.
+func ReadUsage(ctx context.Context) (*corral.LimitStatus, error) {
 	c, err := loadCreds()
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func ReadUsage(ctx context.Context) (*agents.LimitStatus, error) {
 		return nil, fmt.Errorf("claude usage decode: %w", err)
 	}
 
-	s := &agents.LimitStatus{Source: "api/oauth/usage"}
+	s := &corral.LimitStatus{Source: "api/oauth/usage"}
 	if c.SubscriptionType != nil {
 		s.Plan = *c.SubscriptionType
 	}
@@ -157,7 +157,7 @@ func ReadUsage(ctx context.Context) (*agents.LimitStatus, error) {
 		if w == nil || w.Utilization == nil {
 			return
 		}
-		win := agents.LimitWindow{Name: name, UsedPercent: *w.Utilization}
+		win := corral.LimitWindow{Name: name, UsedPercent: *w.Utilization}
 		if w.ResetsAt != nil {
 			if t, perr := time.Parse(time.RFC3339, *w.ResetsAt); perr == nil {
 				win.ResetsAt = t

@@ -1,11 +1,11 @@
-# agents
+# corral
 
 > A provider-abstracted runtime for driving **subscription coding-agent CLIs**
 > (Anthropic Claude Code, OpenAI Codex, Google Antigravity) behind one
 > interface — with a warm session pool, rate-limit awareness, and a per-host
 > plugin installer. Built on [mantle](https://github.com/inovacc/mantle).
 
-`agents` runs a roster of **declarative agents** through a pluggable **Provider**
+`corral` runs a roster of **declarative agents** through a pluggable **Provider**
 backend. Each backend is a real subscription coding agent in its own vendor
 package, so the products stay cleanly separated. The roster is **caller-supplied**
 — you register the agents your application needs; this module ships the machinery,
@@ -38,7 +38,7 @@ standalone, reusable module.
 ## Install
 
 ```bash
-go get github.com/inovacc/agents
+go get github.com/inovacc/corral
 ```
 
 ## Quick start
@@ -47,22 +47,22 @@ go get github.com/inovacc/agents
 import (
     "context"
 
-    "github.com/inovacc/agents"
-    _ "github.com/inovacc/agents/all" // register claude/codex/agy providers
+    "github.com/inovacc/corral"
+    _ "github.com/inovacc/corral/all" // register claude/codex/agy providers
 )
 
 func main() {
     // 1. Register the agents your app needs (the roster is yours).
-    agents.Register(agents.Agent{
+    corral.Register(corral.Agent{
         Name:        "summarizer",
-        Kind:        agents.KindResearch,
+        Kind:        corral.KindResearch,
         Description: "Summarizes a document into 5 bullet points.",
         System:      "You are a terse summarizer. Emit exactly 5 bullets.",
     })
 
     // 2. Pick a provider backend and pair it with the roster.
-    p, _ := agents.ProviderByName("claude") // or "codex" / "agy"
-    ag := agents.NewAgency(p)
+    p, _ := corral.ProviderByName("claude") // or "codex" / "agy"
+    ag := corral.NewAgency(p)
 
     // 3. Run an agent (warm session reused if the provider supports it).
     out, _ := ag.RunAgent(context.Background(), "summarizer", "…document…")
@@ -73,17 +73,17 @@ func main() {
 ## Adding a provider
 
 1. Create `<vendor>/<vendor>.go`, `package <vendor>`.
-2. Return an `*agents.CLIProvider` preset (or a custom type implementing `agents.Provider`).
-3. `init()`: `agents.RegisterProvider(func() agents.Provider { return New() }, "<name>", "<alias>")`.
+2. Return an `*corral.CLIProvider` preset (or a custom type implementing `corral.Provider`).
+3. `init()`: `corral.RegisterProvider(func() corral.Provider { return New() }, "<name>", "<alias>")`.
 4. Blank-import it from `all/all.go`.
 
 > **Invariant:** the core never imports the vendor packages — they self-register.
-> Import `github.com/inovacc/agents/all` (or a specific vendor package) wherever
+> Import `github.com/inovacc/corral/all` (or a specific vendor package) wherever
 > you call `ProviderByName`, or it errors "provider not registered".
 
 ## CLI
 
-A thin binary lives at `cmd/agents` (health checks / version). Build with
+A thin binary lives at `cmd/corral` (health checks / version). Build with
 `task build`.
 
 ## Build & test

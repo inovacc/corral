@@ -15,7 +15,7 @@ import (
 
 	"github.com/UserExistsError/conpty"
 
-	"github.com/inovacc/agents"
+	"github.com/inovacc/corral"
 )
 
 // run executes one agy prompt inside a ConPTY and returns the cleaned output.
@@ -74,7 +74,7 @@ type agySession struct {
 }
 
 // openSession starts agy interactive and waits for it to warm up once.
-func (d *Driver) openSession(ctx context.Context) (agents.Session, error) {
+func (d *Driver) openSession(ctx context.Context) (corral.Session, error) {
 	parts := []string{winQuote(d.cfg.Bin), "--dangerously-skip-permissions"}
 	if d.cfg.Model != "" {
 		parts = append(parts, "--model", winQuote(d.cfg.Model))
@@ -96,24 +96,24 @@ func (d *Driver) openSession(ctx context.Context) (agents.Session, error) {
 }
 
 // Send runs one turn on the warm session.
-func (s *agySession) Send(ctx context.Context, req agents.RunRequest) (agents.RunResult, error) {
+func (s *agySession) Send(ctx context.Context, req corral.RunRequest) (corral.RunResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed.Load() {
-		return agents.RunResult{}, errors.New("agy: session closed")
+		return corral.RunResult{}, errors.New("agy: session closed")
 	}
 	prompt := req.ComposePrompt(true)
 	offset := s.buf.Len()
 	if _, err := s.cpty.Write([]byte(prompt + "\r")); err != nil {
 		s.closed.Store(true)
-		return agents.RunResult{}, fmt.Errorf("agy: write prompt: %w", err)
+		return corral.RunResult{}, fmt.Errorf("agy: write prompt: %w", err)
 	}
 	s.settle(ctx, s.timeout, 1500*time.Millisecond)
 	out := clean(stripEcho(s.buf.From(offset), prompt))
 	if out == "" {
-		return agents.RunResult{}, errors.New("agy: empty response")
+		return corral.RunResult{}, errors.New("agy: empty response")
 	}
-	return agents.RunResult{Text: out, Provider: "agy"}, nil
+	return corral.RunResult{Text: out, Provider: "agy"}, nil
 }
 
 // settle blocks until the output buffer stops growing for idle, or maxWait

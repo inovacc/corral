@@ -1,4 +1,4 @@
-module github.com/inovacc/agents
+module github.com/inovacc/corral
 
 go 1.26.3
 

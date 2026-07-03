@@ -6,16 +6,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/inovacc/agents"
+	"github.com/inovacc/corral"
 )
 
 // Register a demo agent so the shared-file / install tests have a caller-supplied
 // roster to render (the runtime ships no built-in roster).
 func init() {
-	agents.Register(func() agents.Agent {
-		return agents.Agent{
+	corral.Register(func() corral.Agent {
+		return corral.Agent{
 			Name:        "demo",
-			Kind:        agents.KindControl,
+			Kind:        corral.KindControl,
 			Description: "example agent",
 			Tools:       []string{"agents"},
 			System:      "You are a demo agent.",
@@ -36,8 +36,8 @@ func TestRegistry(t *testing.T) {
 }
 
 func TestMCPManifest(t *testing.T) {
-	m := string(MCPManifest("C:/bin/agents.exe"))
-	for _, want := range []string{`"agents"`, `"mcp", "serve"`, `C:/bin/agents.exe`} {
+	m := string(MCPManifest("C:/bin/corral.exe"))
+	for _, want := range []string{`"corral"`, `"mcp", "serve"`, `C:/bin/corral.exe`} {
 		if !strings.Contains(m, want) {
 			t.Errorf("manifest missing %q:\n%s", want, m)
 		}

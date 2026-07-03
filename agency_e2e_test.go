@@ -1,4 +1,4 @@
-package agents_test
+package corral_test
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/inovacc/agents"
-	_ "github.com/inovacc/agents/all" // registers codex/claude/agy providers
+	"github.com/inovacc/corral"
+	_ "github.com/inovacc/corral/all" // registers codex/claude/agy providers
 )
 
 // e2eConceptSchema is a sample structured-output schema (OpenAI-strict: every
@@ -66,13 +66,13 @@ func TestAgency_RealAgentEmitsStructuredConcept(t *testing.T) {
 		t.Skip("no codex/claude CLI on PATH")
 	}
 
-	ag, err := agents.NewAgency(prov, t.TempDir())
+	ag, err := corral.NewAgency(prov, t.TempDir())
 	if err != nil {
 		t.Fatalf("NewAgency(%s): %v", prov, err)
 	}
 	defer func() { _ = ag.Close() }()
 
-	agent := agents.Agent{
+	agent := corral.Agent{
 		Name:   "e2e-emitter",
 		Schema: e2eConceptSchema,
 		System: "You output ONLY the requested concept as JSON matching the schema. " +

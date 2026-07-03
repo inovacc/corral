@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/inovacc/agents"
+	"github.com/inovacc/corral"
 )
 
 // quotaBaseURL is the Google Code Assist backend `agy` reads quota from. The
@@ -126,7 +126,7 @@ func loadProject(ctx context.Context, token string) (string, error) {
 // The response is decoded with a tolerant walk (the gzipped 200 body's exact
 // field nesting was not decodable from the capture; the walker finds any
 // bucket-shaped object — displayName + remainingFraction / consumed+limit).
-func FetchUsage(ctx context.Context) (*agents.LimitStatus, error) {
+func FetchUsage(ctx context.Context) (*corral.LimitStatus, error) {
 	c, err := loadCreds()
 	if err != nil {
 		return nil, err
@@ -168,7 +168,7 @@ func FetchUsage(ctx context.Context) (*agents.LimitStatus, error) {
 		return nil, fmt.Errorf("antigravity usage decode: %w", err)
 	}
 
-	s := &agents.LimitStatus{Plan: "antigravity", Source: "retrieveUserQuotaSummary"}
+	s := &corral.LimitStatus{Plan: "antigravity", Source: "retrieveUserQuotaSummary"}
 	collectBuckets(raw, s)
 	if len(s.Windows) == 0 {
 		return nil, nil
@@ -179,7 +179,7 @@ func FetchUsage(ctx context.Context) (*agents.LimitStatus, error) {
 // collectBuckets walks the decoded quota response and appends a LimitWindow for
 // every "bucket-shaped" object — one carrying a name plus either a
 // remainingFraction or a consumed+limit pair. Tolerant of the exact nesting.
-func collectBuckets(v any, s *agents.LimitStatus) {
+func collectBuckets(v any, s *corral.LimitStatus) {
 	switch t := v.(type) {
 	case map[string]any:
 		if w, ok := bucketWindow(t); ok {
@@ -197,13 +197,13 @@ func collectBuckets(v any, s *agents.LimitStatus) {
 
 // bucketWindow turns a quota-bucket object into a LimitWindow, reporting whether
 // it looked like one.
-func bucketWindow(m map[string]any) (agents.LimitWindow, bool) {
+func bucketWindow(m map[string]any) (corral.LimitWindow, bool) {
 	name := firstString(m, "displayName", "name", "quotaId")
 	used, ok := usedPercent(m)
 	if name == "" || !ok {
-		return agents.LimitWindow{}, false
+		return corral.LimitWindow{}, false
 	}
-	w := agents.LimitWindow{Name: name, UsedPercent: used}
+	w := corral.LimitWindow{Name: name, UsedPercent: used}
 	if rt := firstString(m, "resetTime", "resetAt"); rt != "" {
 		if t, err := time.Parse(time.RFC3339, rt); err == nil {
 			w.ResetsAt = t

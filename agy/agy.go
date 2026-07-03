@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/inovacc/agents"
+	"github.com/inovacc/corral"
 )
 
 func init() {
-	agents.RegisterProvider(func() agents.Provider { return New(Config{}) }, "agy", "antigravity")
+	corral.RegisterProvider(func() corral.Provider { return New(Config{}) }, "agy", "antigravity")
 }
 
 // Driver drives the Antigravity CLI (`agy`) by attaching it to a pseudo-console
@@ -51,11 +51,11 @@ func (d *Driver) Model() string { return d.cfg.Model }
 // Name identifies this provider.
 func (d *Driver) Name() string { return "agy" }
 
-// Usage satisfies agents.UsageReporter via the real Antigravity quota call
+// Usage satisfies corral.UsageReporter via the real Antigravity quota call
 // (POST cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary) using
 // the Google OAuth bearer in ~/.gemini/oauth_creds.json. See usage.go. Failures
 // (offline / not logged in) are non-blocking for the Agency monitor.
-func (d *Driver) Usage() (*agents.LimitStatus, error) {
+func (d *Driver) Usage() (*corral.LimitStatus, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 13*time.Second)
 	defer cancel()
 	return FetchUsage(ctx)
@@ -64,23 +64,23 @@ func (d *Driver) Usage() (*agents.LimitStatus, error) {
 // Run executes one agent turn through agy and returns its output. agy cannot
 // enforce an output schema natively, so any schema is embedded in the prompt.
 // The agent's working Dir is not yet honored (agy runs in the process cwd).
-func (d *Driver) Run(ctx context.Context, req agents.RunRequest) (agents.RunResult, error) {
+func (d *Driver) Run(ctx context.Context, req corral.RunRequest) (corral.RunResult, error) {
 	prompt := req.ComposePrompt(true)
 	if strings.TrimSpace(prompt) == "" {
-		return agents.RunResult{}, errors.New("agy: empty prompt")
+		return corral.RunResult{}, errors.New("agy: empty prompt")
 	}
 	out, err := d.run(ctx, prompt)
 	if err != nil {
-		return agents.RunResult{}, err
+		return corral.RunResult{}, err
 	}
-	return agents.RunResult{Text: out, Provider: "agy"}, nil
+	return corral.RunResult{Text: out, Provider: "agy"}, nil
 }
 
 // Open returns a warm agy session. On Windows it keeps a ConPTY-attached agy
 // process alive across turns so the model is warmed up once, not per call;
 // elsewhere it falls back to a one-shot session. Satisfies SessionOpener, so an
 // Agency drives agy through the long-running SessionPool.
-func (d *Driver) Open(ctx context.Context, _ agents.Agent) (agents.Session, error) {
+func (d *Driver) Open(ctx context.Context, _ corral.Agent) (corral.Session, error) {
 	return d.openSession(ctx)
 }
 
@@ -117,4 +117,4 @@ func winQuote(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
 }
 
-var _ agents.Provider = (*Driver)(nil)
+var _ corral.Provider = (*Driver)(nil)

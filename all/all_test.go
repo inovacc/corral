@@ -4,18 +4,18 @@ import (
 	"os"
 	"testing"
 
-	"github.com/inovacc/agents"
+	"github.com/inovacc/corral"
 )
 
 // TestProvidersRegistered asserts the barrel import wired every vendor provider
 // into the core registry — the contract the rest of the runtime relies on.
 func TestProvidersRegistered(t *testing.T) {
 	for _, name := range []string{"codex", "claude", "code", "agy", "antigravity"} {
-		if _, err := agents.ProviderByName(name); err != nil {
+		if _, err := corral.ProviderByName(name); err != nil {
 			t.Errorf("provider %q not registered: %v", name, err)
 		}
 	}
-	if _, err := agents.ProviderByName(""); err != nil {
+	if _, err := corral.ProviderByName(""); err != nil {
 		t.Errorf("default provider unresolved: %v", err)
 	}
 }
@@ -27,13 +27,13 @@ func TestAgencyRoundTripCodex(t *testing.T) {
 	if os.Getenv("AGENTS_E2E") != "1" {
 		t.Skip("set AGENTS_E2E=1 to run the live codex round-trip")
 	}
-	ag, err := agents.NewAgency("codex", ".")
+	ag, err := corral.NewAgency("codex", ".")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = ag.Close() }()
 	res, err := ag.RunAgent(t.Context(),
-		agents.Agent{Name: "probe", System: "Reply with exactly the word READY and nothing else."},
+		corral.Agent{Name: "probe", System: "Reply with exactly the word READY and nothing else."},
 		"")
 	if err != nil {
 		t.Fatalf("agency run: %v", err)

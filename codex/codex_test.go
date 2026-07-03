@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/inovacc/agents"
+	"github.com/inovacc/corral"
 )
 
 func TestCodexPreset(t *testing.T) {
@@ -21,7 +21,7 @@ func TestCodexPreset(t *testing.T) {
 }
 
 func TestCodexRegistered(t *testing.T) {
-	p, err := agents.ProviderByName("codex")
+	p, err := corral.ProviderByName("codex")
 	if err != nil {
 		t.Fatalf("codex not registered: %v", err)
 	}
@@ -29,10 +29,10 @@ func TestCodexRegistered(t *testing.T) {
 		t.Errorf("provider name = %q, want codex", p.Name())
 	}
 	// Default provider resolves to codex.
-	if _, err := agents.ProviderByName(""); err != nil {
+	if _, err := corral.ProviderByName(""); err != nil {
 		t.Errorf("default provider: %v", err)
 	}
-	if !slices.Contains(agents.RegisteredProviders(), "codex") {
+	if !slices.Contains(corral.RegisteredProviders(), "codex") {
 		t.Error("codex missing from RegisteredProviders")
 	}
 }

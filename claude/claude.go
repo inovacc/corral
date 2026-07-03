@@ -2,7 +2,7 @@
 // headless `claude -p` preset. Claude Code has no native output-schema flag, so
 // schemas are embedded in the prompt and the JSON is parsed from stdout.
 //
-// Usage monitoring (agents.UsageReporter) is implemented as the real call the
+// Usage monitoring (corral.UsageReporter) is implemented as the real call the
 // CLI's `/usage` and `/status` make: GET https://api.anthropic.com/api/oauth/usage
 // with the subscription OAuth bearer read from the CLI's own
 // ~/.claude/.credentials.json (see usage.go). The handler is recovered from the
@@ -14,16 +14,16 @@ import (
 	"context"
 	"time"
 
-	"github.com/inovacc/agents"
+	"github.com/inovacc/corral"
 )
 
 func init() {
-	agents.RegisterProvider(func() agents.Provider { return NewProvider() }, "claude", "code", "claude-code")
+	corral.RegisterProvider(func() corral.Provider { return NewProvider() }, "claude", "code", "claude-code")
 }
 
 // New returns the Claude Code provider preset (headless print mode).
-func New() *agents.CLIProvider {
-	return &agents.CLIProvider{
+func New() *corral.CLIProvider {
+	return &corral.CLIProvider{
 		ProviderName: "claude",
 		Bin:          "claude",
 		BaseArgs:     []string{"-p"},
@@ -33,17 +33,17 @@ func New() *agents.CLIProvider {
 }
 
 // Provider is the registered Claude provider: the CLIProvider preset plus the
-// agents.UsageReporter capability (the real /api/oauth/usage call). Embedding
+// corral.UsageReporter capability (the real /api/oauth/usage call). Embedding
 // promotes Name/Run/Open, so it is also a SessionOpener like the bare preset.
-type Provider struct{ *agents.CLIProvider }
+type Provider struct{ *corral.CLIProvider }
 
 // NewProvider returns the Claude provider with subscription-usage monitoring.
 func NewProvider() *Provider { return &Provider{CLIProvider: New()} }
 
-// Usage satisfies agents.UsageReporter via the real Claude Code subscription
+// Usage satisfies corral.UsageReporter via the real Claude Code subscription
 // endpoint. A short timeout bounds the monitor; absence (not logged in) is
 // reported as (nil, nil) so it never blocks the fleet.
-func (p *Provider) Usage() (*agents.LimitStatus, error) {
+func (p *Provider) Usage() (*corral.LimitStatus, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 	return ReadUsage(ctx)

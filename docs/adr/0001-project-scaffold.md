@@ -13,7 +13,7 @@ A new Go project needs a standard structure, tooling, and runtime foundation.
 - **Task Runner:** Taskfile
 - **Linting:** golangci-lint v2
 - **Releases:** GoReleaser
-- **Module Path:** github.com/inovacc/agents
+- **Module Path:** github.com/inovacc/corral
 
 ## Consequences
 Consistent structure, cross-platform builds, automated releases, mantle-managed

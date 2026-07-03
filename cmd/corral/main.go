@@ -9,21 +9,21 @@ import (
 
 	"github.com/inovacc/mantle/bootstrap"
 
-	"github.com/inovacc/agents/internal/app"
+	"github.com/inovacc/corral/internal/app"
 )
 
 var version = "dev"
 
 func main() {
 	root := &cobra.Command{
-		Use:   "agents",
-		Short: "agents",
+		Use:   "corral",
+		Short: "corral",
 	}
 
 	a := app.New()
 
 	if err := bootstrap.Configure(root, a,
-		bootstrap.WithAppName("agents"),
+		bootstrap.WithAppName("corral"),
 		bootstrap.WithVersion(version),
 	); err != nil {
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")

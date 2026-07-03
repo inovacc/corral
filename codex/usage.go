@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/inovacc/agents"
+	"github.com/inovacc/corral"
 )
 
 // Window is one rate-limit window (the 5h primary or the weekly secondary),
@@ -43,20 +43,20 @@ func (u *Usage) Exhausted() bool {
 		(u.Secondary != nil && u.Secondary.UsedPercent >= 100)
 }
 
-// Status converts the Codex snapshot to the vendor-neutral agents.LimitStatus
+// Status converts the Codex snapshot to the vendor-neutral corral.LimitStatus
 // the Agency monitors. Returns nil when there is no snapshot.
-func (u *Usage) Status() *agents.LimitStatus {
+func (u *Usage) Status() *corral.LimitStatus {
 	if u == nil {
 		return nil
 	}
-	s := &agents.LimitStatus{Plan: u.PlanType, Source: u.Source}
+	s := &corral.LimitStatus{Plan: u.PlanType, Source: u.Source}
 	if u.Primary != nil {
-		s.Windows = append(s.Windows, agents.LimitWindow{
+		s.Windows = append(s.Windows, corral.LimitWindow{
 			Name: "5h", UsedPercent: u.Primary.UsedPercent, ResetsAt: u.Primary.ResetTime(),
 		})
 	}
 	if u.Secondary != nil {
-		s.Windows = append(s.Windows, agents.LimitWindow{
+		s.Windows = append(s.Windows, corral.LimitWindow{
 			Name: "weekly", UsedPercent: u.Secondary.UsedPercent, ResetsAt: u.Secondary.ResetTime(),
 		})
 	}

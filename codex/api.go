@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/inovacc/agents"
+	"github.com/inovacc/corral"
 )
 
 // codexUsageBaseURL is the ChatGPT backend base the Codex CLI uses for account
@@ -92,9 +92,9 @@ type usageResponse struct {
 // FetchUsage performs the real Codex account rate-limit call — the same
 // GET {chatgpt_base_url}/wham/usage the CLI's `/usage` and `/status` make —
 // authenticating with the credentials in ~/.codex/auth.json. It returns the
-// vendor-neutral agents.LimitStatus. This is a dedicated endpoint (NOT the
+// vendor-neutral corral.LimitStatus. This is a dedicated endpoint (NOT the
 // per-turn /responses headers): codex-rs BackendClient::get_rate_limits_with_reset_credits.
-func FetchUsage(ctx context.Context) (*agents.LimitStatus, error) {
+func FetchUsage(ctx context.Context) (*corral.LimitStatus, error) {
 	a, err := loadAuth()
 	if err != nil {
 		return nil, err
@@ -124,7 +124,7 @@ func FetchUsage(ctx context.Context) (*agents.LimitStatus, error) {
 		return nil, fmt.Errorf("codex usage decode: %w", err)
 	}
 
-	s := &agents.LimitStatus{Plan: u.PlanType, Source: "wham/usage"}
+	s := &corral.LimitStatus{Plan: u.PlanType, Source: "wham/usage"}
 	if u.RateLimit != nil {
 		addWindow(s, "5h", u.RateLimit.PrimaryWindow)
 		addWindow(s, "weekly", u.RateLimit.SecondaryWindow)
@@ -137,11 +137,11 @@ func FetchUsage(ctx context.Context) (*agents.LimitStatus, error) {
 
 // addWindow appends a decoded API window to the status. reset_at is an absolute
 // unix epoch (seconds); fall back to now+reset_after_seconds if it is absent.
-func addWindow(s *agents.LimitStatus, name string, w *apiRateWindow) {
+func addWindow(s *corral.LimitStatus, name string, w *apiRateWindow) {
 	if w == nil {
 		return
 	}
-	win := agents.LimitWindow{Name: name, UsedPercent: float64(w.UsedPercent)}
+	win := corral.LimitWindow{Name: name, UsedPercent: float64(w.UsedPercent)}
 	switch {
 	case w.ResetAt > 0:
 		win.ResetsAt = time.Unix(w.ResetAt, 0)

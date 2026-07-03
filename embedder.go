@@ -1,4 +1,4 @@
-package agents
+package corral
 
 import "context"
 

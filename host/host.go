@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/inovacc/agents"
+	"github.com/inovacc/corral"
 )
 
 // Host is one coding-agent target. The minimal surface is Name/Root/Files;
@@ -82,7 +82,7 @@ func ByName(name string) (Host, bool) {
 
 // installDir is the namespaced subdir this package writes into under a host
 // root, so installs never clobber the user's own host config.
-const installDir = "agents"
+const installDir = "corral"
 
 // Install writes a host's plugin tree atomically. base overrides the host root
 // ("" = default). When dryRun is set, no files are written; the planned paths
@@ -139,12 +139,12 @@ func writeFileAtomic(path string, data []byte) error {
 // (Codex/Claude share this format). bin "" defaults to "agents".
 func MCPManifest(bin string) []byte {
 	if bin == "" {
-		bin = "agents"
+		bin = "corral"
 	}
 	// Hand-built so the output is stable and dependency-free.
 	return []byte(`{
   "mcpServers": {
-    "agents": {
+    "corral": {
       "command": "` + jsonEscape(bin) + `",
       "args": ["mcp", "serve"]
     }
@@ -153,9 +153,9 @@ func MCPManifest(bin string) []byte {
 `)
 }
 
-// AgentMarkdown renders one agents.Agent as a host agent-definition file: YAML
+// AgentMarkdown renders one corral.Agent as a host agent-definition file: YAML
 // frontmatter (name/description/kind/tools) followed by the system prompt.
-func AgentMarkdown(a agents.Agent) []byte {
+func AgentMarkdown(a corral.Agent) []byte {
 	var b strings.Builder
 	b.WriteString("---\n")
 	fmt.Fprintf(&b, "name: %s\n", a.Name)
@@ -185,7 +185,7 @@ func sharedFiles(host string) map[string][]byte {
 		".mcp.json": MCPManifest(""),
 		"README.md": readme(host),
 	}
-	for _, a := range agents.All() {
+	for _, a := range corral.All() {
 		files["agents/"+a.Name+".md"] = AgentMarkdown(a)
 	}
 	return files

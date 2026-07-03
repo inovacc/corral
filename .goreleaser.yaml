@@ -1,8 +1,8 @@
 version: 2
 project_name: agents
 builds:
-  - main: ./cmd/agents
-    binary: agents
+  - main: ./cmd/corral
+    binary: corral
     env: [CGO_ENABLED=0]
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]

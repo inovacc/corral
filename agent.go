@@ -1,4 +1,4 @@
-package agents
+package corral
 
 // Kind classifies an agent's role in the KB lifecycle.
 type Kind string
