@@ -1,9 +1,16 @@
 # corral
 
+<!-- rev:002 -->
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/inovacc/corral.svg)](https://pkg.go.dev/github.com/inovacc/corral)
+[![Test](https://github.com/inovacc/corral/actions/workflows/test.yml/badge.svg)](https://github.com/inovacc/corral/actions/workflows/test.yml)
+[![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
+[![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8.svg)](https://go.dev/)
+
 > A provider-abstracted runtime for driving **subscription coding-agent CLIs**
-> (Anthropic Claude Code, OpenAI Codex, Google Antigravity) behind one
-> interface — with a warm session pool, rate-limit awareness, and a per-host
-> plugin installer. Built on [mantle](https://github.com/inovacc/mantle).
+> (Claude Code, Codex, Antigravity, Grok, Kimi, Qwen) behind one interface —
+> with a warm session pool, rate-limit awareness, and a per-host plugin
+> installer. Built on [mantle](https://github.com/inovacc/mantle).
 
 `corral` runs a roster of **declarative agents** through a pluggable **Provider**
 backend. Each backend is a real subscription coding agent in its own vendor
@@ -47,29 +54,43 @@ go get github.com/inovacc/corral
 ## Quick start
 
 ```go
+package main
+
 import (
     "context"
+    "fmt"
+    "log"
 
     "github.com/inovacc/corral"
-    _ "github.com/inovacc/corral/all" // register claude/codex/agy providers
+    _ "github.com/inovacc/corral/all" // register every provider (claude/codex/agy/grok/kimi/qwen)
 )
 
 func main() {
-    // 1. Register the agents your app needs (the roster is yours).
-    corral.Register(corral.Agent{
-        Name:        "summarizer",
-        Kind:        corral.KindResearch,
-        Description: "Summarizes a document into 5 bullet points.",
-        System:      "You are a terse summarizer. Emit exactly 5 bullets.",
+    // 1. Register the agents your app needs. Register takes a lazy factory;
+    //    the roster is yours — the library ships no built-in agents.
+    corral.Register(func() corral.Agent {
+        return corral.Agent{
+            Name:        "summarizer",
+            Kind:        corral.KindResearch,
+            Description: "Summarizes a document into 5 bullet points.",
+            System:      "You are a terse summarizer. Emit exactly 5 bullets.",
+        }
     })
 
-    // 2. Pick a provider backend and pair it with the roster.
-    p, _ := corral.ProviderByName("claude") // or "codex" / "agy"
-    ag := corral.NewAgency(p)
+    // 2. Open an Agency for a provider backend (by name) + a working dir.
+    ag, err := corral.NewAgency("claude", ".") // or codex / agy / grok / kimi / qwen
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer ag.Close()
 
-    // 3. Run an agent (warm session reused if the provider supports it).
-    out, _ := ag.RunAgent(context.Background(), "summarizer", "…document…")
-    _ = out
+    // 3. Look the agent up by name and run it (warm session reused if supported).
+    agent, _ := corral.ByName("summarizer")
+    out, err := ag.RunAgent(context.Background(), agent, "…document…")
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(out.Text)
 }
 ```
 
