@@ -4,3 +4,6 @@
 dist/
 .idea/
 .vscode/
+
+# stray build artifacts
+*.exe
