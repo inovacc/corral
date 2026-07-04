@@ -18,7 +18,7 @@ var version = "dev"
 // (read-only/interactive commands whose stdout must stay clean).
 func isLightCommand(arg string) bool {
 	switch arg {
-	case "usage", "launch":
+	case "usage", "launch", "serve":
 		return true
 	}
 	return false
@@ -30,7 +30,7 @@ func main() {
 	// would pollute a command whose stdout must be pure data or an inherited TTY.
 	if len(os.Args) > 1 && isLightCommand(os.Args[1]) {
 		light := &cobra.Command{Use: "corral", Version: version}
-		light.AddCommand(newUsageCmd(), newLaunchCmd())
+		light.AddCommand(newUsageCmd(), newLaunchCmd(), newServeCmd())
 		if err := light.Execute(); err != nil {
 			os.Exit(1)
 		}
@@ -52,7 +52,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	root.AddCommand(newUsageCmd(), newLaunchCmd())
+	root.AddCommand(newUsageCmd(), newLaunchCmd(), newServeCmd())
 
 	root.RunE = func(cmd *cobra.Command, _ []string) error {
 		return bootstrap.Run(cmd, func(ctx context.Context, rt *bootstrap.Runtime) error {
