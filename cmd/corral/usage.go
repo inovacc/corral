@@ -34,7 +34,11 @@ func newUsageCmd() *cobra.Command {
 			default:
 				return fmt.Errorf("name a provider or pass --all (registered: %s)", strings.Join(canonicalProviders(), ", "))
 			}
-			_, err := io.WriteString(cmd.OutOrStdout(), renderUsage(names))
+			out := renderUsage(names, all)
+			if all && strings.TrimSpace(out) == "" {
+				out = "no providers reporting usage data (not logged in?)\n"
+			}
+			_, err := io.WriteString(cmd.OutOrStdout(), out)
 			return err
 		},
 	}
@@ -68,8 +72,10 @@ type usageResult struct {
 }
 
 // renderUsage queries each provider concurrently and returns a text block per
-// provider, preserving the requested order.
-func renderUsage(names []string) string {
+// provider, preserving the requested order. When hideEmpty is set, providers
+// with no usable data (not logged in / no queryable endpoint) are omitted;
+// errors are always shown since they are actionable.
+func renderUsage(names []string, hideEmpty bool) string {
 	results := make([]usageResult, len(names))
 	var wg sync.WaitGroup
 	for i, name := range names {
@@ -99,8 +105,14 @@ func renderUsage(names []string) string {
 		case r.err != nil:
 			b.WriteString(fmt.Sprintf("%-8s  ! %v\n", r.name, r.err))
 		case r.noEP:
+			if hideEmpty {
+				continue
+			}
 			b.WriteString(fmt.Sprintf("%-8s  - no queryable usage endpoint\n", r.name))
 		case r.st == nil:
+			if hideEmpty {
+				continue
+			}
 			b.WriteString(fmt.Sprintf("%-8s  - no data (not logged in?)\n", r.name))
 		default:
 			plan := r.st.Plan

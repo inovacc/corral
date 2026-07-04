@@ -135,7 +135,7 @@ func newLaunchCmd() *cobra.Command {
 			}
 
 			if !noUsage {
-				cmd.PrintErrf("── %s usage (before) ─────────────\n%s\n", name, renderUsage([]string{name}))
+				cmd.PrintErrf("── %s usage (before) ─────────────\n%s\n", name, renderUsage([]string{name}, false))
 			}
 
 			var cargs []string
@@ -150,7 +150,7 @@ func newLaunchCmd() *cobra.Command {
 			runErr := run.Run()
 
 			if !noUsage {
-				cmd.PrintErrf("\n── %s usage (after) ─────────────\n%s\n", name, renderUsage([]string{name}))
+				cmd.PrintErrf("\n── %s usage (after) ─────────────\n%s\n", name, renderUsage([]string{name}, false))
 			}
 			return runErr
 		},
