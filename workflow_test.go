@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 )
 
 // fakeRunner scripts RunAgent responses and records inputs, keyed by call order.
+// mu guards all fields because Parallel invokes RunAgent from many goroutines.
 type fakeRunner struct {
+	mu      sync.Mutex
 	replies []RunResult
 	errs    []error
 	inputs  []string
@@ -17,6 +20,8 @@ type fakeRunner struct {
 }
 
 func (f *fakeRunner) RunAgent(_ context.Context, ag Agent, input string) (RunResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.inputs = append(f.inputs, input)
 	f.agents = append(f.agents, ag.Name)
 	i := f.n
