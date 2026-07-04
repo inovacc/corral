@@ -46,6 +46,7 @@ type Monitor struct {
 	threshold float64
 	history   int
 	onAlert   func(Alert)
+	onSample  func(Sample)
 	now       func() time.Time
 
 	mu      sync.Mutex
@@ -86,6 +87,11 @@ func WithHistory(n int) MonitorOption {
 // threshold — debounced until the provider recovers below it. The host wires it
 // to whatever it wants (slog, a toast, a webhook, pausing dispatch).
 func OnAlert(f func(Alert)) MonitorOption { return func(m *Monitor) { m.onAlert = f } }
+
+// OnSample registers a callback fired once per provider on every poll (after the
+// sample is recorded and any alert is evaluated). The host wires it to a sink;
+// the Monitor stays sink-agnostic.
+func OnSample(f func(Sample)) MonitorOption { return func(m *Monitor) { m.onSample = f } }
 
 // NewMonitor builds a Monitor. Register providers with Watch or WatchProvider,
 // then call Run (blocking, ctx-bounded) in a goroutine, or Poll on demand.
@@ -149,6 +155,7 @@ func (m *Monitor) Poll(ctx context.Context) {
 		}
 		m.record(smp)
 		m.maybeAlert(w.name, smp)
+		m.emitSample(smp)
 	}
 }
 
@@ -175,6 +182,15 @@ func (m *Monitor) maybeAlert(name string, s Sample) {
 	m.mu.Unlock()
 	if over && !was && cb != nil {
 		cb(Alert{Provider: name, Worst: s.Worst, Threshold: m.threshold, Status: s.Status, At: s.At})
+	}
+}
+
+func (m *Monitor) emitSample(s Sample) {
+	m.mu.Lock()
+	cb := m.onSample
+	m.mu.Unlock()
+	if cb != nil {
+		cb(s)
 	}
 }
 

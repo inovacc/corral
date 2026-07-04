@@ -93,6 +93,27 @@ func TestMonitorHistoryCap(t *testing.T) {
 	}
 }
 
+func TestMonitorOnSample(t *testing.T) {
+	r := &fakeReporter{used: 42}
+	var got []Sample
+	m := NewMonitor(WithThreshold(80), OnSample(func(s Sample) { got = append(got, s) }))
+	m.Watch("acme", r)
+
+	m.Poll(context.Background())
+	if len(got) != 1 {
+		t.Fatalf("OnSample calls after 1 poll = %d, want 1", len(got))
+	}
+	if got[0].Provider != "acme" || got[0].Worst != 42 {
+		t.Fatalf("sample = %+v, want provider=acme worst=42", got[0])
+	}
+
+	r.used = 55
+	m.Poll(context.Background())
+	if len(got) != 2 || got[1].Worst != 55 {
+		t.Fatalf("after 2nd poll: %d samples, last=%+v, want 2 ending at 55", len(got), got[len(got)-1])
+	}
+}
+
 func TestMonitorRunStopsOnContext(t *testing.T) {
 	m := NewMonitor(WithInterval(10 * time.Millisecond))
 	m.Watch("acme", &fakeReporter{used: 5})
