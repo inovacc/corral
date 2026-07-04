@@ -69,34 +69,10 @@ func (Host) Plugin(c *aihost.Component) (map[string][]byte, error) {
 	return tree, nil
 }
 
-// renderMarkdown renders a YAML frontmatter block (in the given key order)
-// followed by a body. The frontmatter block always ends with a newline so
-// the closing "---" is on its own line.
-func renderMarkdown(keys []string, values map[string]string, body string) []byte {
-	var b strings.Builder
-	b.WriteString("---\n")
-	for _, k := range keys {
-		v, ok := values[k]
-		if !ok {
-			continue
-		}
-		fmt.Fprintf(&b, "%s: %s\n", k, v)
-	}
-	b.WriteString("---\n\n")
-	b.WriteString(body)
-	if !strings.HasSuffix(b.String(), "\n") {
-		b.WriteString("\n")
-	}
-	return []byte(b.String())
-}
-
 // skillMarkdown renders a skill asset: name, description.
 func skillMarkdown(a aihost.Asset) []byte {
-	values := map[string]string{
-		"name":        a.Name,
-		"description": yamlScalar(a.Description),
-	}
-	return renderMarkdown([]string{"name", "description"}, values, a.PromptBody())
+	values := map[string]any{"name": a.Name, "description": a.Description}
+	return aihost.RenderMarkdown([]string{"name", "description"}, values, a.PromptBody())
 }
 
 // libraryMarkdown renders a portable library SKILL.md: a Markdown index of
@@ -118,20 +94,8 @@ func libraryMarkdown(component, kindLabel string, assets []aihost.Asset) []byte 
 	}
 	body.WriteString("\nCodex has no native command/agent surface, so these ship as a readable skill index instead. Adapt each listed asset's prompt to this host's conventions as needed.\n")
 
-	values := map[string]string{
-		"name":        name,
-		"description": yamlScalar(description),
-	}
-	return renderMarkdown([]string{"name", "description"}, values, body.String())
-}
-
-// yamlScalar quotes a frontmatter scalar when it contains characters that
-// would otherwise break YAML parsing.
-func yamlScalar(s string) string {
-	if strings.ContainsAny(s, ":#") {
-		return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
-	}
-	return s
+	values := map[string]any{"name": name, "description": description}
+	return aihost.RenderMarkdown([]string{"name", "description"}, values, body.String())
 }
 
 // pluginManifest renders .codex-plugin/plugin.json.
@@ -148,7 +112,7 @@ func pluginManifest(c *aihost.Component) ([]byte, error) {
 		Name:        c.Name,
 		Version:     "0.1.0",
 		Description: c.Description,
-		Author:      map[string]string{"name": "Security Research"},
+		Author:      map[string]string{"name": c.Name},
 		License:     "BSD-3-Clause",
 		Skills:      "skills",
 		MCPServers:  ".mcp.json",

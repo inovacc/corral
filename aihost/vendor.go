@@ -76,38 +76,78 @@ func renderFormatted(t *template.Template, data any) ([]byte, error) {
 	return out, nil
 }
 
-// assetMarkdown renders an Asset to a vendor markdown file: YAML frontmatter
-// (from the provided fields, in stable key order) + blank line + body. The
-// frontmatter block ALWAYS ends with a newline so the closing --- is on its own
-// line (the Render invariant carried from unravel's aihost).
-func assetMarkdown(a Asset, frontmatter map[string]any) []byte {
+// RenderMarkdown renders a YAML frontmatter block (from values, in the given
+// key order) followed by a blank line and body. This is the one shared
+// frontmatter renderer for all vendors (claude/gemini/codex previously each
+// carried their own copy). Callers pass raw Metadata/field values — string,
+// []string, or a JSON-decoded []interface{} — and RenderMarkdown formats
+// each via YAMLScalar; keys absent from values are skipped. The frontmatter
+// block ALWAYS ends with a newline so the closing --- is on its own line
+// (the Render invariant carried from unravel's aihost).
+func RenderMarkdown(keys []string, values map[string]any, body string) []byte {
 	var b strings.Builder
 	b.WriteString("---\n")
-	keys := make([]string, 0, len(frontmatter))
-	for k := range frontmatter {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
 	for _, k := range keys {
-		fmt.Fprintf(&b, "%s: %s\n", k, yamlScalar(frontmatter[k]))
+		v, ok := values[k]
+		if !ok {
+			continue
+		}
+		fmt.Fprintf(&b, "%s: %s\n", k, YAMLScalar(v))
 	}
 	b.WriteString("---\n\n")
-	b.WriteString(a.PromptBody())
+	b.WriteString(body)
 	if !strings.HasSuffix(b.String(), "\n") {
 		b.WriteString("\n")
 	}
 	return []byte(b.String())
 }
 
-// yamlScalar renders a frontmatter value as a minimal YAML scalar (string,
-// []string as a flow list, else fmt).
-func yamlScalar(v any) string {
+// YAMLScalar renders a frontmatter value as a minimal YAML scalar: a bare or
+// quoted string, a flow list ("[a, b, c]") for []string or []interface{}, or
+// a fmt.Sprint fallback for anything else.
+//
+// The []interface{} branch matters: Asset.Metadata is decoded from JSON, so
+// an array-valued key (e.g. `allowed-tools: [Bash, Read]` in corral.json)
+// unmarshals to []interface{}, not []string. Without this branch it falls
+// through to fmt.Sprint(t), which renders "[Bash Read]" — invalid YAML
+// frontmatter (space-separated, no commas, no quoting). This was the
+// metaString/yamlScalar bug in the vendor packages: they type-asserted
+// Metadata values as string and silently stringified arrays before the
+// scalar formatter ever saw them.
+func YAMLScalar(v any) string {
 	switch t := v.(type) {
 	case string:
-		return t
+		return yamlScalarString(t)
 	case []string:
-		return "[" + strings.Join(t, ", ") + "]"
+		return yamlScalarList(t)
+	case []interface{}:
+		return yamlScalarList(t)
 	default:
 		return fmt.Sprint(t)
 	}
+}
+
+// yamlScalarList renders a flow-list ("[a, b, c]") from any slice, quoting
+// string elements as needed. Shared by the []string and []interface{}
+// branches of YAMLScalar so both render identically.
+func yamlScalarList[T any](items []T) string {
+	parts := make([]string, len(items))
+	for i, it := range items {
+		if s, ok := any(it).(string); ok {
+			parts[i] = yamlScalarString(s)
+		} else {
+			parts[i] = fmt.Sprint(it)
+		}
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+// yamlScalarString quotes a scalar string when it contains characters that
+// would otherwise break YAML parsing (':' or '#'), or has leading/trailing
+// whitespace; otherwise it is returned bare.
+func yamlScalarString(s string) string {
+	if strings.ContainsAny(s, ":#") || s != strings.TrimSpace(s) {
+		return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
+	}
+	return s
 }

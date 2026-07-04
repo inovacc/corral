@@ -11,7 +11,6 @@ package claude
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/inovacc/corral/aihost"
 )
@@ -68,60 +67,35 @@ func (Host) Plugin(c *aihost.Component) (map[string][]byte, error) {
 	return tree, nil
 }
 
-// renderMarkdown renders a YAML frontmatter block (in the given key order)
-// followed by the asset's prompt body. The frontmatter block always ends
-// with a newline so the closing "---" is on its own line.
-func renderMarkdown(a aihost.Asset, keys []string, values map[string]string) []byte {
-	var b strings.Builder
-	b.WriteString("---\n")
-	for _, k := range keys {
-		v, ok := values[k]
-		if !ok {
-			continue
-		}
-		fmt.Fprintf(&b, "%s: %s\n", k, v)
-	}
-	b.WriteString("---\n\n")
-	b.WriteString(a.PromptBody())
-	if !strings.HasSuffix(b.String(), "\n") {
-		b.WriteString("\n")
-	}
-	return []byte(b.String())
-}
-
 // commandMarkdown renders a command asset: description, argument-hint,
 // allowed-tools from Metadata. No "name" key.
 func commandMarkdown(a aihost.Asset) []byte {
-	values := map[string]string{"description": yamlScalar(a.Description)}
-	if hint, ok := metaString(a.Metadata, "argumentHint", "argument-hint"); ok {
-		values["argument-hint"] = yamlScalar(hint)
+	values := map[string]any{"description": a.Description}
+	if hint, ok := metaValue(a.Metadata, "argumentHint", "argument-hint"); ok {
+		values["argument-hint"] = hint
 	}
-	if tools, ok := metaString(a.Metadata, "allowedTools", "allowed-tools"); ok {
-		values["allowed-tools"] = yamlScalar(tools)
+	if tools, ok := metaValue(a.Metadata, "allowedTools", "allowed-tools"); ok {
+		values["allowed-tools"] = tools
 	}
-	return renderMarkdown(a, []string{"description", "argument-hint", "allowed-tools"}, values)
+	return aihost.RenderMarkdown([]string{"description", "argument-hint", "allowed-tools"}, values, a.PromptBody())
 }
 
 // agentMarkdown renders an agent/subagent asset: name, description.
 func agentMarkdown(a aihost.Asset) []byte {
-	values := map[string]string{
-		"name":        a.Name,
-		"description": yamlScalar(a.Description),
-	}
-	return renderMarkdown(a, []string{"name", "description"}, values)
+	values := map[string]any{"name": a.Name, "description": a.Description}
+	return aihost.RenderMarkdown([]string{"name", "description"}, values, a.PromptBody())
 }
 
 // skillMarkdown renders a skill asset: name, description.
 func skillMarkdown(a aihost.Asset) []byte {
-	values := map[string]string{
-		"name":        a.Name,
-		"description": yamlScalar(a.Description),
-	}
-	return renderMarkdown(a, []string{"name", "description"}, values)
+	values := map[string]any{"name": a.Name, "description": a.Description}
+	return aihost.RenderMarkdown([]string{"name", "description"}, values, a.PromptBody())
 }
 
 // metaString looks up any of the given keys in metadata and returns the
-// first match as a string.
+// first match as a string. Used for hook wiring (event/command/matcher),
+// where the value is consumed directly rather than rendered as YAML
+// frontmatter.
 func metaString(metadata map[string]any, keys ...string) (string, bool) {
 	for _, k := range keys {
 		if v, ok := metadata[k]; ok {
@@ -134,13 +108,17 @@ func metaString(metadata map[string]any, keys ...string) (string, bool) {
 	return "", false
 }
 
-// yamlScalar quotes a frontmatter scalar when it contains characters that
-// would otherwise break YAML parsing.
-func yamlScalar(s string) string {
-	if strings.ContainsAny(s, ":#") {
-		return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
+// metaValue looks up any of the given keys in metadata and returns the raw
+// value — unlike metaString, it does not stringify non-string values, so a
+// JSON-decoded array (e.g. allowed-tools: []interface{}) reaches
+// aihost.YAMLScalar as a slice instead of a pre-collapsed, invalid string.
+func metaValue(metadata map[string]any, keys ...string) (any, bool) {
+	for _, k := range keys {
+		if v, ok := metadata[k]; ok {
+			return v, true
+		}
 	}
-	return s
+	return nil, false
 }
 
 // hookEntry is one entry in a hooks.json event array.
