@@ -9,6 +9,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -28,10 +29,6 @@ func (fakeClaudeVendor) Plugin(*Component) (map[string][]byte, error) {
 	}, nil
 }
 
-func (fakeClaudeVendor) InstallTarget(base string) (string, error) {
-	return filepath.Join(base, "claude"), nil
-}
-
 func sampleComponent() *Component {
 	return &Component{
 		Name: "suite", Module: "github.com/me/suite",
@@ -48,7 +45,7 @@ func sampleComponent() *Component {
 func TestGenerate_EmitsExpectedTree(t *testing.T) {
 	RegisterVendor(func() Vendor { return fakeClaudeVendor{} })
 
-	files, err := Generate(sampleComponent(), []string{"claude"}, "out")
+	files, err := Generate(sampleComponent(), []string{"claude"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,8 +71,58 @@ func TestGenerate_EmitsExpectedTree(t *testing.T) {
 	}
 }
 
+// TestGenerate_ComponentGenEmbedsDotfiles guards against a regression to
+// `//go:embed assets` (which silently drops dot-prefixed files such as
+// .mcp.json and .claude-plugin/plugin.json — Go's embed excludes anything
+// starting with "." unless the "all:" prefix is used).
+func TestGenerate_ComponentGenEmbedsDotfiles(t *testing.T) {
+	RegisterVendor(func() Vendor { return fakeClaudeVendor{} })
+
+	files, err := Generate(sampleComponent(), []string{"claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, f := range files {
+		if filepath.ToSlash(f.Path) == "claude/component.gen.go" {
+			if !strings.Contains(string(f.Content), "//go:embed all:assets") {
+				t.Errorf("component.gen.go must embed with all:assets to include dotfiles, got:\n%s", f.Content)
+			}
+			return
+		}
+	}
+	t.Fatal("claude/component.gen.go not found in generated files")
+}
+
+// TestGenerate_GoModUsesGeneratedGoDirective guards against the generated
+// go.mod hardcoding a Go version independent of corral's own go.mod `go`
+// directive — the generated module requires corral, so it must declare at
+// least the Go version corral was built with.
+func TestGenerate_GoModUsesGeneratedGoDirective(t *testing.T) {
+	RegisterVendor(func() Vendor { return fakeClaudeVendor{} })
+
+	files, err := Generate(sampleComponent(), []string{"claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, f := range files {
+		if filepath.ToSlash(f.Path) == "claude/go.mod" {
+			content := string(f.Content)
+			if strings.Contains(content, "go 1.25") {
+				t.Errorf("go.mod must not hardcode go 1.25, got:\n%s", content)
+			}
+			if !strings.Contains(content, "go "+generatedGoDirective) {
+				t.Errorf("go.mod must contain the templated go directive %q, got:\n%s", generatedGoDirective, content)
+			}
+			return
+		}
+	}
+	t.Fatal("claude/go.mod not found in generated files")
+}
+
 func TestGenerate_UnknownVendor(t *testing.T) {
-	if _, err := Generate(sampleComponent(), []string{"does-not-exist"}, "out"); err == nil {
+	if _, err := Generate(sampleComponent(), []string{"does-not-exist"}); err == nil {
 		t.Fatal("expected error for unknown vendor")
 	}
 }
@@ -88,7 +135,7 @@ func TestGenerate_UnknownVendor(t *testing.T) {
 func TestGenerate_GeneratedGoFilesParseCleanly(t *testing.T) {
 	RegisterVendor(func() Vendor { return fakeClaudeVendor{} })
 
-	files, err := Generate(sampleComponent(), []string{"claude"}, "out")
+	files, err := Generate(sampleComponent(), []string{"claude"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +160,7 @@ func TestGenerate_GeneratedGoFilesParseCleanly(t *testing.T) {
 func TestWriteTree(t *testing.T) {
 	RegisterVendor(func() Vendor { return fakeClaudeVendor{} })
 
-	files, err := Generate(sampleComponent(), []string{"claude"}, "out")
+	files, err := Generate(sampleComponent(), []string{"claude"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -58,18 +58,3 @@ func TestGeminiPlugin_EmitsExtensionTree(t *testing.T) {
 		t.Errorf("gemini-extension.json missing mcp command:\n%s", ext)
 	}
 }
-
-func TestGeminiHost_InstallTarget(t *testing.T) {
-	got, err := (Host{}).InstallTarget("/base")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// filepath.Join uses OS separators; normalize for comparison. Mirrors the
-	// claude vendor's convention: InstallTarget returns the shared extensions
-	// dir under base — the caller namespaces the component's own subdir
-	// beneath it.
-	norm := strings.ReplaceAll(got, "\\", "/")
-	if !strings.HasSuffix(norm, "/.gemini/extensions") {
-		t.Errorf("InstallTarget = %q, want suffix .gemini/extensions", got)
-	}
-}

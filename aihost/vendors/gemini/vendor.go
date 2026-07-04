@@ -13,7 +13,6 @@ package gemini
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -29,12 +28,6 @@ type Host struct{}
 
 // Name identifies this vendor in the aihost.Vendor registry.
 func (Host) Name() string { return "gemini" }
-
-// InstallTarget returns the shared extensions dir under base; the caller
-// namespaces the component's own subdir beneath it.
-func (Host) InstallTarget(base string) (string, error) {
-	return filepath.Join(base, ".gemini", "extensions"), nil
-}
 
 // Plugin renders the Gemini extension tree from the component IR.
 func (Host) Plugin(c *aihost.Component) (map[string][]byte, error) {

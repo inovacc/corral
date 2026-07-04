@@ -63,18 +63,3 @@ func TestCodexPlugin_EmitsPluginTree(t *testing.T) {
 		t.Errorf(".mcp.json missing mcp command:\n%s", mj)
 	}
 }
-
-func TestCodexHost_InstallTarget(t *testing.T) {
-	got, err := (Host{}).InstallTarget("/base")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// filepath.Join uses OS separators; normalize for comparison. Mirrors the
-	// claude/gemini vendors' convention: InstallTarget returns the shared
-	// plugins dir under base — the caller namespaces the component's own
-	// subdir beneath it.
-	norm := strings.ReplaceAll(got, "\\", "/")
-	if !strings.HasSuffix(norm, "/.codex/plugins") {
-		t.Errorf("InstallTarget = %q, want suffix .codex/plugins", got)
-	}
-}

@@ -11,7 +11,6 @@ package claude
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/inovacc/corral/aihost"
@@ -26,12 +25,6 @@ type Host struct{}
 
 // Name identifies this vendor in the aihost.Vendor registry.
 func (Host) Name() string { return "claude" }
-
-// InstallTarget returns the shared marketplaces dir under base; the caller
-// namespaces the component's own subdir beneath it.
-func (Host) InstallTarget(base string) (string, error) {
-	return filepath.Join(base, ".claude", "plugins", "marketplaces"), nil
-}
 
 // Plugin renders the full Claude plugin tree from the component IR.
 func (Host) Plugin(c *aihost.Component) (map[string][]byte, error) {

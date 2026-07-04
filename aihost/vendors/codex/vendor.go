@@ -13,7 +13,6 @@ package codex
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -29,12 +28,6 @@ type Host struct{}
 
 // Name identifies this vendor in the aihost.Vendor registry.
 func (Host) Name() string { return "codex" }
-
-// InstallTarget returns the shared plugins dir under base; the caller
-// namespaces the component's own subdir beneath it.
-func (Host) InstallTarget(base string) (string, error) {
-	return filepath.Join(base, ".codex", "plugins"), nil
-}
 
 // Plugin renders the Codex plugin tree from the component IR.
 func (Host) Plugin(c *aihost.Component) (map[string][]byte, error) {

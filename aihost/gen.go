@@ -18,6 +18,13 @@ import (
 // into every generated vendor go.mod.
 const corralModuleVersion = "v0.1.1"
 
+// generatedGoDirective pins the `go` directive emitted into every generated
+// vendor go.mod. It mirrors corral's OWN go.mod `go` directive (read via
+// `grep '^go ' go.mod` in the corral repo root) rather than an independently
+// chosen version, since a generated module requiring corral must declare a Go
+// version at least as new as the one corral itself was built with.
+const generatedGoDirective = "1.26.3"
+
 // wrapperPackage is the fixed package name used by every generated Go-module
 // wrapper file (agents.gen.go, component.gen.go, doc.go). Each vendor gets its
 // own go.mod (module <c.Module>/<vendor>), so a single shared package name
@@ -29,12 +36,8 @@ const wrapperPackage = "component"
 // tree (under "<vendor>/assets/…") plus a shared Go-module wrapper
 // (go.mod, agents.gen.go, component.gen.go, doc.go, README.md) under
 // "<vendor>/". Returned paths are relative (slash-separated); callers persist
-// them with WriteTree. The out parameter names the eventual install root for
-// documentation/caller bookkeeping — Generate itself only returns relative
-// GeneratedFile.Path values, so it is accepted but not consulted here.
-func Generate(c *Component, vendors []string, out string) ([]GeneratedFile, error) {
-	_ = out // reserved: WriteTree's base plays this role today.
-
+// them with WriteTree, which also determines the eventual install root.
+func Generate(c *Component, vendors []string) ([]GeneratedFile, error) {
 	var files []GeneratedFile
 	for _, name := range vendors {
 		v, ok := VendorByName(name)
@@ -118,7 +121,7 @@ type agentLiteral struct {
 }
 
 type goModData struct {
-	Module, Vendor, Version string
+	Module, Vendor, Version, GoDirective string
 }
 
 type agentsGenData struct {
@@ -142,7 +145,7 @@ type readmeData struct {
 func moduleWrapperFiles(c *Component, vendor string) ([]GeneratedFile, error) {
 	var out []GeneratedFile
 
-	modBuf, err := renderPlain(goModTpl, goModData{Module: c.Module, Vendor: vendor, Version: corralModuleVersion})
+	modBuf, err := renderPlain(goModTpl, goModData{Module: c.Module, Vendor: vendor, Version: corralModuleVersion, GoDirective: generatedGoDirective})
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +194,7 @@ func moduleWrapperFiles(c *Component, vendor string) ([]GeneratedFile, error) {
 var goModTpl = template.Must(template.New("go.mod").Parse(
 	`module {{.Module}}/{{.Vendor}}
 
-go 1.25
+go {{.GoDirective}}
 
 require github.com/inovacc/corral {{.Version}}
 `))
@@ -230,12 +233,18 @@ import (
 	"github.com/inovacc/corral"
 )
 
-//go:embed assets
+//go:embed all:assets
 var assetsFS embed.FS
 
-// New returns a corral.Agency for the "{{.Vendor}}" component.
-func New() (*corral.Agency, error) {
-	return corral.NewAgency("{{.Vendor}}", ".")
+// New returns a corral.Agency for the "{{.Vendor}}" component, running
+// against the process's current working directory ("."). This component's
+// plugin tree was generated for the {{.Vendor}} host, but corral itself
+// decides which provider actually runs — pass whichever runtime provider
+// corral has registered (e.g. "claude", "codex", "agy", "grok", "kimi"; note
+// corral does not register a "gemini" provider yet, even though this
+// component's assets were generated for the gemini host).
+func New(provider string) (*corral.Agency, error) {
+	return corral.NewAgency(provider, ".")
 }
 
 // Install writes the embedded plugin tree under target, returning the number
@@ -300,5 +309,5 @@ install the tree programmatically.
 
 ## Run the component's agents
 
-    agency, err := component.New()
+    agency, err := component.New("claude") // or any provider corral registers
 `))

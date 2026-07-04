@@ -11,8 +11,6 @@ func (fakeVendor) Name() string { return "fake" }
 func (fakeVendor) Plugin(*Component) (map[string][]byte, error) {
 	return map[string][]byte{"x.md": []byte("x")}, nil
 }
-func (fakeVendor) InstallTarget(base string) (string, error) { return base + "/fake", nil }
-
 func TestVendorRegistry(t *testing.T) {
 	RegisterVendor(func() Vendor { return fakeVendor{} })
 	if _, ok := VendorByName("fake"); !ok {

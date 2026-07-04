@@ -27,6 +27,7 @@ func newGenCmd() *cobra.Command {
 		vendor string
 		dryRun bool
 	)
+	const allVendors = "all"
 	cmd := &cobra.Command{
 		Use:   "gen",
 		Short: "Generate per-vendor components from a corral.json spec",
@@ -40,14 +41,14 @@ func newGenCmd() *cobra.Command {
 			}
 
 			vendors := c.Vendors
-			if vendor != "" && vendor != "all" {
+			if vendor != "" && vendor != allVendors {
 				vendors = []string{vendor}
 			}
 			if len(vendors) == 0 {
 				return fmt.Errorf("corral gen: no vendors to generate (pass --vendor or set component.vendors in %s)", config)
 			}
 
-			files, err := aihost.Generate(c, vendors, out)
+			files, err := aihost.Generate(c, vendors)
 			if err != nil {
 				return err
 			}
@@ -66,7 +67,7 @@ func newGenCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&config, "config", "corral.json", "path to the component spec")
 	cmd.Flags().StringVar(&out, "out", "./gen", "output directory for generated components")
-	cmd.Flags().StringVar(&vendor, "vendor", "", `target vendor (e.g. "claude"), or "all"/empty for every vendor in the spec`)
+	cmd.Flags().StringVar(&vendor, "vendor", allVendors, `target vendor (e.g. "claude"), or "all" for every vendor in the spec`)
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print planned file paths without writing them")
 
 	cmd.AddCommand(newGenListCmd())

@@ -19,7 +19,6 @@ import (
 type Vendor interface {
 	Name() string
 	Plugin(c *Component) (map[string][]byte, error) // slash-path → bytes
-	InstallTarget(base string) (string, error)
 }
 
 var (
