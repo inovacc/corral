@@ -14,13 +14,23 @@ import (
 
 var version = "dev"
 
+// isLightCommand reports whether a subcommand should bypass the mantle bootstrap
+// (read-only/interactive commands whose stdout must stay clean).
+func isLightCommand(arg string) bool {
+	switch arg {
+	case "usage", "launch":
+		return true
+	}
+	return false
+}
+
 func main() {
-	// Read-only query commands (usage) bypass the mantle bootstrap: its config
-	// loader logs to stdout and writes a config.yaml in the cwd, which would
-	// pollute a command whose stdout must be pure, pipeable data.
-	if len(os.Args) > 1 && os.Args[1] == "usage" {
+	// Read-only/interactive commands (usage, launch) bypass the mantle bootstrap:
+	// its config loader logs to stdout and writes a config.yaml in the cwd, which
+	// would pollute a command whose stdout must be pure data or an inherited TTY.
+	if len(os.Args) > 1 && isLightCommand(os.Args[1]) {
 		light := &cobra.Command{Use: "corral", Version: version}
-		light.AddCommand(newUsageCmd())
+		light.AddCommand(newUsageCmd(), newLaunchCmd())
 		if err := light.Execute(); err != nil {
 			os.Exit(1)
 		}
@@ -42,7 +52,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	root.AddCommand(newUsageCmd())
+	root.AddCommand(newUsageCmd(), newLaunchCmd())
 
 	root.RunE = func(cmd *cobra.Command, _ []string) error {
 		return bootstrap.Run(cmd, func(ctx context.Context, rt *bootstrap.Runtime) error {
