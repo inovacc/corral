@@ -40,8 +40,9 @@ type jsonlRecord struct {
 
 // JSONLSink appends one JSON line per CHANGED sample and one per alert. It keeps
 // a per-provider signature and skips samples whose signature is unchanged since
-// the last written line, so an idle fleet produces almost no output. Safe for
-// concurrent use (the serve signal handler's Close can race the poll goroutine).
+// the last written line, so an idle fleet produces almost no output. Every method
+// is mutex-guarded: `corral serve` drives it from a single poll goroutine (so the
+// lock is defensive there), and the guard keeps any future concurrent caller safe.
 type JSONLSink struct {
 	mu      sync.Mutex
 	f       io.WriteCloser
