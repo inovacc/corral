@@ -1,117 +1,129 @@
-# corral Asset Hub — single source of truth, multi-format import → vendor render (definition plane) — Design
+# corral Component Generator — canonical spec → per-vendor component (definition plane) — Design
 
 **Status:** Approved to plan · 2026-07-04 · module `github.com/inovacc/corral`
+**Supersedes** the earlier "multi-format import → vendor render" framing of this file. Reframed after mapping **sequa** (`the-migrator`): corral is a **codegen engine** in sequa's image, not a document renderer.
 
-## 0. Problem
+## 0. Vision (the sequa mapping)
 
-corral should be the **single source of truth** for AI agent definitions — commands, agents, subagents, skills, hooks — and a **module for extensibility**: users bring their own definitions in whatever format they already have, and corral renders + installs them into each vendor's document format (Claude plugin, Gemini extension, Codex plugin, …). Today corral has only a thin seed: `host/` renders the runtime `corral.Agent` roster (inline Go structs) to a **byte-identical** `agents/<name>.md` + `.mcp.json` tree for claude/codex/agy — **no `Asset` IR, no importer, no vendor-specific rendering, no assets CLI** (the render code is library-only, unwired). This builds the full **import → canonical IR → vendor render** pipeline, generalizing `host/` and bringing lensr's `aihost` maturity, so corral becomes the cross-vendor "define once, deploy anywhere" hub.
+sequa takes one canonical **SQL** and generates a dialect-specific Go **component** for postgres/sqlite/mysql. corral takes one canonical **agent spec** and generates a vendor-specific **component** for the AI vendors — **Claude = postgres, Gemini = sqlite, Codex = mysql**. Per the agent's needs, `corral gen` produces a **complete, tailor-made component per vendor**: the vendor's installable plugin tree **and** a Go module wrapper (go.mod + corral wiring) — "the import module and all the things needed to work" — so the component is both **installable** into that CLI and **runnable/importable** as Go.
+
+sequa's proven pattern, adopted deliberately:
+- A small **`Vendor` interface** (= sequa's `Engine`/dialect) — only the vendor-specific translation lives behind it; the IR and the Go-module codegen are **shared**.
+- **Config-driven** (a `corral.yaml`, = sequa.yaml), not flag-soup.
+- Codegen via **`text/template` + `go/format`** (gofmt-clean, valid Go — exactly sequa's `renderFormatted`).
+- **Golden-file tests** (byte-compare generated trees — sequa's safety net).
+- **Native canonical spec** as the single input (= sequa's SQL; matches the "native format first" decision).
+- **One deliberate improvement over sequa:** a `RegisterVendor` **registry** (sequa hardcodes a `switch` — a limitation we do NOT copy, because corral is "a module for extensibility").
 
 ## 1. Architecture
 
 ```
-  IMPORTERS (pluggable)         CANONICAL IR (source of truth)      RENDERERS (pluggable)
-  Claude .md (frontmatter) ─┐                                    ┌─ Claude   → commands/ agents/ skills/ hooks.json .mcp.json .claude-plugin/plugin.json
-  Gemini .toml ─────────────┤   Asset{ Kind, Name, Description,  ┼─ Gemini   → gemini-extension.json + skills/ + GEMINI.md
-  generic YAML / JSON ──────┼─▶  Body, Metadata, Source }  ──────┼─ Codex    → .codex-plugin/plugin.json + skills/ + .mcp.json
-  «user-registered»  ───────┘   held in a Library (all/by-kind)   └─ «user-registered»
+  corral.yaml + native asset spec (YAML/JSON)        SHARED IR                 PER-VENDOR + SHARED CODEGEN                 COMPLETE COMPONENT
+  component{name,module,mcp} + assets[              Component{Meta,        ┌─ Vendor.Plugin(c) → plugin tree          ┌─ <out>/<vendor>/
+   {kind:agent|command|subagent|skill|hook,   ──▶  []Asset{Kind,Name,  ──▶│  (claude/gemini/codex manifests+md)   ──▶ │   plugin tree (installable)
+    name,description,model,tools,system,...}]        Description,Body,     └─ shared Go-module codegen (go.mod,       │   go.mod + *.gen.go + assets/ (runnable)
+                                                     Metadata}}               agents.gen.go, component.gen.go,          │   doc.go + README.md
+       PARSE (native, stdlib/1-dep)                  [source of truth]        embed, doc.go) parameterized by vendor    └─ (installable AND importable)
 ```
 
-- **Canonical IR (`Asset`)** — the vendor-neutral definition model, distinct from the runtime `corral.Agent` (which stays the execution unit). An `Asset` of `KindAgent` can be derived from / to a `corral.Agent`; the IR is broader (also command/subagent/skill/hook).
-- **Library** — the in-memory single-source-of-truth collection assets are imported into and rendered from.
-- **Importer / Renderer** — pluggable interfaces (lazy-factory registries, mirroring corral's existing `host.register` / `RegisterProvider` idiom) so users extend both the input and output sides.
-- **Generalize `host/`, don't duplicate:** its atomic `Install`, `Host` registry, and `Doctor`/`Report` become the install/health layer; `AgentMarkdown`/`MCPManifest`/`sharedFiles` become the seed of the **Claude renderer**. The new home is package **`aihost/`** (mirrors the lensr lineage the user named); `host/` is migrated in and left as a thin deprecated shim (≥30-day window per the deprecation policy) or removed in a dedicated commit once the CLI cuts over.
+- **Per-vendor (behind `Vendor`):** the plugin-tree shape + manifest formats (Claude vs Gemini vs Codex). *This is the only thing that varies* — sequa's insight (only parse+typemap vary; render is shared).
+- **Shared:** the IR, the Go-module wrapper codegen, the CLI, install, and golden harness.
 
-## 2. The IR (`aihost/asset.go`)
+## 2. Canonical input — `corral.yaml` + native asset spec
+
+```yaml
+version: "1"
+component:
+  name: my-agent-suite
+  module: github.com/me/my-agent-suite     # → generated go.mod module path
+  description: "…"
+  mcp: { command: corral, args: [mcp, serve] }   # the component's MCP server wiring
+vendors: [claude, gemini, codex]               # which components to generate
+assets:                                        # inline, OR `assetDir: ./assets` of YAML/JSON files
+  - { kind: agent,   name: researcher, description: "…", model: "", tools: [web], system: "…" }
+  - { kind: command, name: review,     description: "…", argumentHint: "[path]", allowedTools: [Read], body: "…" }
+  - { kind: skill,   name: enrich,     description: "…", body: "…" }
+  - { kind: subagent, name: verifier,  description: "…", system: "…" }
+  - { kind: hook,    name: on-stop,    description: "…", event: Stop, command: "corral hook stop" }  # claude-only
+```
+Native format only this milestone (JSON via stdlib; YAML via a single lean dep — the "native format first" decision). Multi-format IMPORT (Claude-md/Gemini-toml → spec) is a deferred, additive follow-on (its own `Importer` registry), NOT in this milestone.
+
+## 3. Shared IR (`aihost/ir.go`, package `aihost`)
 
 ```go
 type AssetKind string // "command" | "agent" | "subagent" | "skill" | "hook"
-
 type Asset struct {
 	Kind        AssetKind
-	Name        string         // unique within kind (kebab-case)
+	Name        string
 	Description string
-	Body        string         // the prompt / instructions (markdown)
-	Metadata    map[string]any // vendor-neutral extras: tools, argument-hint, model, allowed-tools, trigger, matcher…
-	Source      string         // provenance: origin file path / importer name
+	Body        string
+	Metadata    map[string]any // tools, argumentHint, allowedTools, model, event, matcher…
 }
-
-type Library struct { /* assets, indexed by (kind,name) */ }
-func NewLibrary() *Library
-func (l *Library) Add(a ...Asset) error            // dup (kind,name) is an error
-func (l *Library) All() []Asset                    // sorted, stable
-func (l *Library) ByKind(k AssetKind) []Asset
-func (l *Library) ByName(k AssetKind, name string) (Asset, bool)
+type Component struct {
+	Name, Module, Description string
+	MCP    MCPSpec            // command + args
+	Assets []Asset
+}
+func Load(configPath string) (*Component, []string /*vendors*/, error) // parse corral.yaml (+assetDir)
 ```
 
-## 3. Importers (`aihost/importer.go` + `aihost/importers/*`)
+## 4. The `Vendor` seam + registry (`aihost/vendor.go`)
 
 ```go
-type Importer interface {
-	Name() string
-	CanImport(path string) bool            // by extension + a cheap content sniff
-	Import(path string) ([]Asset, error)   // one file → assets
+// Vendor is a codegen backend for one AI host (sequa's Engine). Only the
+// installable plugin tree varies per vendor; the Go-module wrapper is shared.
+type Vendor interface {
+	Name() string                                     // "claude" | "gemini" | "codex"
+	Plugin(c *Component) (map[string][]byte, error)   // slash-path → bytes: the installable tree
+	InstallTarget(base string) (string, error)        // where the plugin installs (~/.claude/… etc.)
 }
-func RegisterImporter(f func() Importer)
-func Importers() []Importer
-// ImportDir walks dir, dispatches each file to the first Importer that CanImport it,
-// collecting into a Library; unknown files are skipped (reported).
-func ImportDir(dir string) (*Library, []string /*skipped*/, error)
+func RegisterVendor(f func() Vendor)                  // lazy factory (corral idiom); NOT a switch
+func Vendors() []Vendor
+func VendorByName(name string) (Vendor, bool)
 ```
+Built-in vendors (`aihost/vendors/{claude,gemini,codex}`), registered in `init()`, barreled via `aihost/vendors/all`. Reuse the manifest formats already proven in unravel/lensr aihost (Claude: commands/agents/skills/`hooks/hooks.json`/`.mcp.json`/`.claude-plugin/plugin.json`; Gemini: `gemini-extension.json`+skills+`GEMINI.md`; Codex: `.codex-plugin/plugin.json`+skills+`.mcp.json`). Commands/agents that a vendor can't express natively are surfaced as portable library skills (lensr's `portable_libraries` pattern). Enforce the **frontmatter-ends-with-`\n`** invariant (unravel's Render bug class) via a golden.
 
-**Broad first-milestone importers:**
-- **`claudemd`** — Claude `.md` with YAML frontmatter. Kind inferred from the containing dir (`commands/`→command, `agents/`→agent, `skills/…/SKILL.md`→skill) or a frontmatter `kind:`. Frontmatter → `Metadata` (description/argument-hint/allowed-tools/name), body → `Body`.
-- **`geminitoml`** — Gemini command `.toml` (name/description/prompt) → command Assets.
-- **`corralyaml`** — a native corral YAML **and** JSON asset spec (a list of `{kind,name,description,body,metadata}`), the canonical authoring format. JSON via stdlib `encoding/json`.
+## 5. The generated component — a complete unit (`aihost/gen.go`)
 
-**Dependency decision (flag in review):** parsing needs a YAML reader (frontmatter + `corralyaml`) and a TOML reader (`geminitoml`). corral's thesis is "one external dep (`conpty`)". Options: **(A) accept two lean pure-Go parsers** (`gopkg.in/yaml.v3`, `github.com/BurntSushi/toml`) confined to the `aihost` subsystem (runtime stays lean); **(B) hand-roll a minimal `key: value` + block-scalar frontmatter parser** (avoids YAML for the common Claude-md case) and defer TOML. **Recommendation: (A)** — the asset hub is an explicit new subsystem; two standard parsers are proportionate, and the runtime/provider path keeps its lean budget. Confirm at spec review.
+For each selected vendor, `Generate` emits `<out>/<vendor>/` containing:
 
-## 4. Renderers (`aihost/renderer.go` + `aihost/renderers/*`)
+**(a) the installable plugin tree** — from `Vendor.Plugin(c)` (markdown assets + manifests).
+
+**(b) the Go module wrapper** (sequa-style codegen; `text/template`+`go/format`, auto-computed imports):
+- `go.mod` — `module <component.Module>/<vendor>` + `require github.com/inovacc/corral <ver>`.
+- `agents.gen.go` — the spec's agent/subagent assets as `corral.Agent` literals + `func init(){ corral.Register(...) }` (importing the module registers the roster).
+- `component.gen.go` — `New() (*corral.Agency, error)` pre-wired to this vendor's provider (`corral.NewAgency("<vendor>", ".")`), plus `Install(base string) (int, error)` that writes the embedded plugin tree to `InstallTarget`.
+- `assets_embed.gen.go` — `//go:embed assets/*` of the plugin tree, so the component installs itself.
+- `doc.go` (package doc, provenance `// Code generated by corral. DO NOT EDIT.`) + `README.md` (usage).
+
+So the component is **installable** (`Install()` writes the vendor plugin) **and runnable** (`New()` returns an Agency wired to the vendor) — depends only on stdlib + corral.
 
 ```go
-type Renderer interface {
-	Vendor() string                                       // "claude" | "gemini" | "codex"
-	Render(lib *Library, td TemplateData) (map[string][]byte, error) // slash-path → bytes
-}
-func RegisterRenderer(f func() Renderer)
-func Renderers() []Renderer
-func RendererByVendor(v string) (Renderer, bool)
-type TemplateData struct { Name, Version, Description, McpCommand string }
+func Generate(c *Component, vendors []string, out string) ([]GeneratedFile, error)
+type GeneratedFile struct { Path string; Content []byte } // caller writes atomically
 ```
 
-**Broad first-milestone renderers (formats confirmed from the unravel/lensr aihost hosts):**
-- **`claude`** — `commands/<n>.md`, `agents/<n>.md`, `skills/<n>/SKILL.md`, `hooks/hooks.json` (from hook assets), `.mcp.json`, `.claude-plugin/plugin.json`. (Generalizes `host.AgentMarkdown`/`MCPManifest` to all kinds.)
-- **`gemini`** — `gemini-extension.json` (mcpServers inline) + `skills/<n>/SKILL.md` + `GEMINI.md`. Commands are TOML on Gemini — render command assets into a portable command-library skill (the lensr `portable_libraries` pattern) so they stay discoverable.
-- **`codex`** — `.codex-plugin/plugin.json` + `skills/<n>/SKILL.md` + `.mcp.json`; commands/agents likewise surfaced via portable-library skills.
+## 6. CLI (`cmd/corral/gen.go`)
 
-Rendering an `Asset` to a vendor markdown file = frontmatter (from `Kind` + `Metadata`, per that vendor's convention) + `Body`, with the **frontmatter-ends-with-`\n`** invariant enforced (the Render defect class from unravel's `pkg/aihost`).
-
-## 5. Install + CLI (`aihost/install.go`, `cmd/corral/assets.go`)
-
-- **Install:** generalize `host.Install` — `Install(r Renderer, lib *Library, target string, dryRun bool) (Result, error)`, atomic tmp+rename + stale-sweep (adopt lensr's `WriteTreeAtomic`).
-- **CLI (`corral assets …`)** — the user-facing extensibility surface:
-  - `corral assets import <dir>` — load definitions → Library; print a summary (counts by kind, skipped files).
-  - `corral assets list` — show the loaded IR.
-  - `corral assets render --from <dir> --vendor claude --out <dir>` — import + render to disk.
-  - `corral assets install --from <dir> --vendor claude|gemini|codex|all [--dry-run]` — import + render + install into the host.
-  - `corral assets doctor --vendor <v>` — reuse the `host` Doctor/Report health model.
-
-## 6. Extensibility (the module contract)
-
-corral is imported as a Go module; downstream code registers its own `Importer`/`Renderer` in `init()` (same lazy-factory pattern as providers). A `docs/aihost/EXTENDING.md` documents: implement the interface, `RegisterImporter`/`RegisterRenderer`, and your format/vendor joins the pipeline. The built-in importers/renderers ship in `aihost/importers` / `aihost/renderers` barrels.
+Config-driven like sequa (`--config`, no per-vendor flag-soup); a `--vendor` override for one-offs:
+- `corral gen [--config corral.yaml] [--out ./gen] [--vendor claude|gemini|codex|all] [--dry-run]` — parse → IR → per-vendor Generate → write atomically. Dry-run lists planned files.
+- `corral gen list` — show the loaded IR (assets by kind, target vendors).
+- `corral gen doctor --vendor <v>` — reuse the existing `host` Doctor/Report health model.
 
 ## 7. Constraints & non-goals
 
-- **Dep budget:** +2 parser deps (yaml.v3, toml) confined to `aihost` (pending review); the runtime/provider/serve paths add none.
-- **No embed.FS-only limitation:** unlike unravel's aihost (Go-literals only), corral's hub **loads real files** (that's the point) — it adopts lensr's `toolkit/` real-file model.
-- **Frontmatter-`\n` invariant** carried over from unravel's aihost (guarded by a render test).
-- **Non-goals (this milestone):** round-trip fidelity guarantees (importing then re-rendering to the SAME source format byte-for-byte); a GUI; remote/registry asset sources; the runtime execution of assets (that's the workflow-composition/execution-plane spec). Hooks rendering is Claude-only (codex/gemini have no hook surface).
-- **Relationship to the runtime `Agent`:** an `Asset{Kind:agent}` ⇄ `corral.Agent` mapping is provided so the existing roster can seed the Library and vice-versa, but the two types stay distinct (definition IR vs execution unit).
+- **Deps:** native spec parse = stdlib JSON + one lean pure-Go YAML dep (or hand-rolled minimal YAML, decided at plan time); Go codegen = **stdlib** (`text/template`, `go/format`) — sequa's exact approach, **no heavy deps, no adk-go**. Runtime/provider/serve paths add nothing.
+- **Generated Go must be `gofmt`-clean and compile** — every render goes through `go/format` (sequa's `renderFormatted`); a test compiles a generated component.
+- **Golden tests** per vendor (byte-compare the generated tree; `-update` regenerates) — sequa's safety net.
+- **Extensibility:** `RegisterVendor` (+ a later `RegisterImporter`) is the module contract; `docs/EXTENDING.md` documents adding a vendor.
+- **Non-goals (this milestone):** multi-format IMPORT (native spec only now); the *runtime execution/orchestration* of agents (covered by the workflow-composition spec — the execution plane); round-trip fidelity; a standalone-monorepo generator (each vendor component gets its own `go.mod` sub-path, not a separate repo).
+- **Relationship to `corral.Agent`:** an `Asset{Kind:agent}` ⇄ `corral.Agent` mapping seeds `agents.gen.go`; the two types stay distinct (definition IR vs runtime unit).
+- **Relationship to existing `host/`:** `host/`'s atomic `Install`, `Host` registry, `Doctor`/`Report`, and `AgentMarkdown`/`MCPManifest` are the seed of the Claude `Vendor` + install layer; `host/` is generalized into `aihost/` and left a thin deprecated shim (≥30-day) until the CLI cuts over.
 
 ## 8. Testing
-
-- IR/Library: add/dup/index table tests.
-- Each importer: parse a fixture file → expected Assets (frontmatter/metadata/body mapping; kind inference).
-- Each renderer: Library → expected vendor tree (paths + a content spot-check + the frontmatter-`\n` invariant).
+- IR/`Load`: parse a `corral.yaml` fixture → expected `Component`.
+- Each `Vendor.Plugin`: `Component` → expected tree (paths + content spot-check + frontmatter-`\n`).
+- Go-module codegen: golden `*.gen.go` + a test that the generated module **compiles** (`go build` a fixture output in a temp dir) — the sequa "output is valid Go" guarantee.
 - Install: `t.TempDir()` atomic write + stale-sweep.
-- CLI: `assets import`/`list` against a fixture dir; `render`/`install --dry-run` smoke.
-- All network-free; `task test` green; `task lint` clean.
+- CLI: `gen --dry-run` + `gen list` against a fixture; all three vendors.
+- Network-free; `task test` + `task lint` green.
