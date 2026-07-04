@@ -116,12 +116,11 @@ func loadProject(ctx context.Context, token string) (string, error) {
 //	User-Agent: antigravity/cli/1.0.11 windows/amd64
 //	body: {"project":"<cloudaicompanionProject>"}
 //
-// IMPORTANT — entitlement: the call needs agy's OWN access token, which carries
-// the Antigravity-Pro entitlement. The token in ~/.gemini/oauth_creds.json is
-// gemini-cli's (different OAuth client) and the same request returns 403
-// PERMISSION_DENIED with it — agy mints its entitled token through a separate
-// auth flow not persisted to a readable file. So this returns a clear error on
-// 403 rather than pretending. See docs/agents-usage-signals.md.
+// Auth: the bearer is the ~/.gemini/oauth_creds.json access token, refreshed
+// in-memory via the OAuth refresh_token when expired (see oauth.go) — exactly
+// how agy 1.0.15 works (the on-disk token is usually stale). If a refreshed token
+// still lacks the Antigravity-Pro entitlement the endpoint returns 403, which is
+// surfaced honestly. Dissect-confirmed surface: docs/kb/agy.md.
 //
 // The response is decoded with a tolerant walk (the gzipped 200 body's exact
 // field nesting was not decodable from the capture; the walker finds any
