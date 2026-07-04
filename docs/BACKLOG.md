@@ -8,7 +8,8 @@ Effort key: **S** (< 1 day) · **M** (1–3 days) · **L** (> 3 days).
 - **[M] `usage.go` + `UsageReporter` for grok, kimi.** Only `agy/`, `claude/`, and `codex/` ship a `UsageReporter` today; `grok/` and `kimi/` have none. Each provider's quota/usage endpoint needs reverse-engineering (grok x.ai, Moonshot Kimi) before a `LimitStatus` can be surfaced through `Monitor`.
 - **[M] SessionPool backoff + attempt cap (`session.go`).** The reopen path can hot-loop when a warm session keeps failing to come back. Add exponential backoff plus a bounded attempt cap so a dead provider degrades instead of spinning.
 - **[S] `checkLimit` backpressure under concurrency (`monitor.go`).** Concurrent callers can stampede the limit check; add backpressure so quota probes are coalesced/serialized rather than fired per-goroutine.
-- **[M] Pluggable `UsageSink` to persist `LimitStatus`.** Introduce a sink seam so `Monitor` can hand `LimitStatus` snapshots to a caller-supplied persister (DB, metrics, file) instead of holding them only in memory.
+- **[S] Context-aware `UsageReporter.Usage(ctx)`.** `Monitor.Poll` only checks `ctx` *between* providers; a provider's blocking `Usage()` HTTP call ignores cancellation, so SIGINT during a hung poll (and `corral serve --once` against a hung provider) can't be promptly bounded. Thread a `context.Context` into `Usage` so shutdown/timeout is honored mid-call. (Surfaced by the `corral serve` whole-feature review, 2026-07-04.)
+  - ~~Pluggable `UsageSink` to persist `LimitStatus`~~ — **DONE 2026-07-04:** `UsageSink` + `JSONLSink` + `Monitor.OnSample` seam shipped via `corral serve` (append-only JSONL change log).
 - **[L] Raise test coverage 61.2% → 80%.** Focus on the under-covered provider packages and the session/monitor state machines.
 
 ## P3 — Later / opportunistic
