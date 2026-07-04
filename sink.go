@@ -3,6 +3,7 @@ package corral
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,7 +44,7 @@ type jsonlRecord struct {
 // concurrent use (the serve signal handler's Close can race the poll goroutine).
 type JSONLSink struct {
 	mu      sync.Mutex
-	f       *os.File
+	f       io.WriteCloser
 	enc     *json.Encoder
 	lastSig map[string]string
 }
@@ -57,7 +58,13 @@ func NewJSONLSink(path string) (*JSONLSink, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open usage log: %w", err)
 	}
-	return &JSONLSink{f: f, enc: json.NewEncoder(f), lastSig: map[string]string{}}, nil
+	return newJSONLSink(f), nil
+}
+
+// newJSONLSink builds a JSONLSink around any io.WriteCloser, allowing tests to
+// inject a writer that fails so the dedup-rollback path can be exercised.
+func newJSONLSink(w io.WriteCloser) *JSONLSink {
+	return &JSONLSink{f: w, enc: json.NewEncoder(w), lastSig: map[string]string{}}
 }
 
 // sampleSignature is a stable string capturing everything a "change" cares about:
@@ -105,8 +112,19 @@ func (s *JSONLSink) WriteSample(smp Sample) error {
 	if prev, ok := s.lastSig[smp.Provider]; ok && prev == sig {
 		return nil
 	}
+	// Encode first; only record the signature as written if the write succeeded,
+	// so a transient write error doesn't poison dedup (the next identical sample
+	// will retry rather than being silently skipped).
+	if err := s.enc.Encode(recordFromSample(smp)); err != nil {
+		// json.Encoder latches its first write error permanently (all later
+		// Encode calls short-circuit and return the cached error), so rebuild
+		// it here too -- otherwise a retry would fail even once the
+		// underlying writer recovers.
+		s.enc = json.NewEncoder(s.f)
+		return err
+	}
 	s.lastSig[smp.Provider] = sig
-	return s.enc.Encode(recordFromSample(smp)) // json.Encoder appends '\n'
+	return nil
 }
 
 // WriteAlert writes an alert line (alerts are already debounced by the Monitor).

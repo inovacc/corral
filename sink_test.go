@@ -3,6 +3,7 @@ package corral
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,6 +87,41 @@ func TestJSONLSink_WritesAlert(t *testing.T) {
 	lines := readLines(t, path)
 	if len(lines) != 1 || lines[0]["event"] != "alert" || lines[0]["threshold"].(float64) != 80 {
 		t.Fatalf("alert record wrong: %v", lines)
+	}
+}
+
+// failWriter fails Write after okWrites successful writes, to exercise the
+// dedup-rollback path.
+type failWriter struct {
+	okWrites int
+	n        int
+}
+
+func (w *failWriter) Write(p []byte) (int, error) {
+	w.n++
+	if w.n > w.okWrites {
+		return 0, errors.New("disk full")
+	}
+	return len(p), nil
+}
+func (w *failWriter) Close() error { return nil }
+
+func TestJSONLSink_WriteFailureDoesNotPoisonDedup(t *testing.T) {
+	fw := &failWriter{okWrites: 0} // every write fails
+	sink := newJSONLSink(fw)
+	ts := time.Unix(1_700_000_000, 0).UTC()
+
+	if err := sink.WriteSample(sampleAt("claude", 42, ts)); err == nil {
+		t.Fatal("expected write error, got nil")
+	}
+	// The failed write must NOT have recorded the signature — a retry of the
+	// same sample must attempt the write again (not be deduped away).
+	fw.okWrites = 10 // now writes succeed
+	if err := sink.WriteSample(sampleAt("claude", 42, ts)); err != nil {
+		t.Fatalf("retry after failed write should succeed, got %v", err)
+	}
+	if fw.n != 2 {
+		t.Fatalf("expected 2 write attempts (fail then retry), got %d — dedup was poisoned", fw.n)
 	}
 }
 
