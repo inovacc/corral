@@ -121,12 +121,6 @@ func newAnthropic(cfg Config) corral.Provider {
 	return &anthropicProvider{cfg: cfg, hc: defaultClient()}
 }
 
-type openaiProvider struct {
-	cfg     Config
-	hc      *http.Client
-	mu      sync.Mutex
-	lastLim *corral.LimitStatus
-}
 type anthropicProvider struct {
 	cfg     Config
 	hc      *http.Client
@@ -134,12 +128,8 @@ type anthropicProvider struct {
 	lastLim *corral.LimitStatus
 }
 
-func (p *openaiProvider) Name() string    { return "openai" }
 func (p *anthropicProvider) Name() string { return "anthropic" }
 
-func (p *openaiProvider) Run(ctx context.Context, req corral.RunRequest) (corral.RunResult, error) {
-	return corral.RunResult{}, fmt.Errorf("openai: not implemented")
-}
 func (p *anthropicProvider) Run(ctx context.Context, req corral.RunRequest) (corral.RunResult, error) {
 	return corral.RunResult{}, fmt.Errorf("anthropic: not implemented")
 }
