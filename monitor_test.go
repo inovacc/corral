@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 // stubProvider is a Provider that optionally reports usage.
@@ -23,7 +24,44 @@ func (s *stubProvider) Run(_ context.Context, _ RunRequest) (RunResult, error) {
 // usageStub adds the UsageReporter capability.
 type usageStub struct{ *stubProvider }
 
-func (u usageStub) Usage() (*LimitStatus, error) { return u.status, u.err }
+func (u usageStub) Usage(context.Context) (*LimitStatus, error) { return u.status, u.err }
+
+// ctxUsageStub blocks in Usage until the caller's ctx is cancelled, then reports
+// the ctx error — modeling a hung provider HTTP call. It proves checkLimit
+// threads the caller's ctx all the way into Usage (item #5).
+type ctxUsageStub struct {
+	*stubProvider
+	observed chan struct{}
+}
+
+func (c ctxUsageStub) Usage(ctx context.Context) (*LimitStatus, error) {
+	<-ctx.Done()
+	close(c.observed)
+	return nil, ctx.Err()
+}
+
+func TestCheckLimit_HonorsContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled — Usage must return promptly, not hang forever
+	c := ctxUsageStub{stubProvider: &stubProvider{name: "hang"}, observed: make(chan struct{})}
+	done := make(chan error, 1)
+	go func() { done <- checkLimit(ctx, c, 80) }()
+	select {
+	case err := <-done:
+		// A ctx error during Usage must degrade to non-blocking (absence of data
+		// never blocks the fleet — only a positive over-limit signal does).
+		if err != nil {
+			t.Fatalf("ctx-cancelled Usage must degrade non-blocking, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("checkLimit hung on a cancelled ctx — ctx is not threaded through to Usage")
+	}
+	select {
+	case <-c.observed:
+	default:
+		t.Fatal("Usage never observed ctx cancellation")
+	}
+}
 
 func TestLimitStatusWorstAndOK(t *testing.T) {
 	s := &LimitStatus{Windows: []LimitWindow{{Name: "5h", UsedPercent: 40}, {Name: "weekly", UsedPercent: 96}}}
@@ -45,7 +83,7 @@ func TestLimitStatusWorstAndOK(t *testing.T) {
 }
 
 func TestProviderUsageUnsupported(t *testing.T) {
-	_, supported, err := ProviderUsage(&stubProvider{name: "bare"})
+	_, supported, err := ProviderUsage(context.Background(), &stubProvider{name: "bare"})
 	if supported || err != nil {
 		t.Errorf("bare provider: supported=%v err=%v", supported, err)
 	}

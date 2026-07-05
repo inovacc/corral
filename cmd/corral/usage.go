@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -34,7 +35,7 @@ func newUsageCmd() *cobra.Command {
 			default:
 				return fmt.Errorf("name a provider or pass --all (registered: %s)", strings.Join(canonicalProviders(), ", "))
 			}
-			out := renderUsage(names, all)
+			out := renderUsage(cmd.Context(), names, all)
 			if all && strings.TrimSpace(out) == "" {
 				out = "no providers reporting usage data (not logged in?)\n"
 			}
@@ -75,7 +76,7 @@ type usageResult struct {
 // provider, preserving the requested order. When hideEmpty is set, providers
 // with no usable data (not logged in / no queryable endpoint) are omitted;
 // errors are always shown since they are actionable.
-func renderUsage(names []string, hideEmpty bool) string {
+func renderUsage(ctx context.Context, names []string, hideEmpty bool) string {
 	results := make([]usageResult, len(names))
 	var wg sync.WaitGroup
 	for i, name := range names {
@@ -93,7 +94,7 @@ func renderUsage(names []string, hideEmpty bool) string {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			st, err := ur.Usage()
+			st, err := ur.Usage(ctx)
 			results[i] = usageResult{name: rn, st: st, err: err}
 		}()
 	}

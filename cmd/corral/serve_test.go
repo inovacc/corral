@@ -14,7 +14,7 @@ import (
 // fakeUsage is a UsageReporter with a fixed snapshot for serve tests.
 type fakeUsage struct{ used float64 }
 
-func (f fakeUsage) Usage() (*corral.LimitStatus, error) {
+func (f fakeUsage) Usage(context.Context) (*corral.LimitStatus, error) {
 	return &corral.LimitStatus{Plan: "test", Windows: []corral.LimitWindow{{Name: "5h", UsedPercent: f.used}}}, nil
 }
 

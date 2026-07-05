@@ -1,6 +1,7 @@
 package corral
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -70,7 +71,7 @@ func (s *LimitStatus) String() string {
 // into a hard limit mid-run (rather than failing the turn). Providers without a
 // queryable limit (Antigravity, Claude Code) simply do not implement it.
 type UsageReporter interface {
-	Usage() (*LimitStatus, error)
+	Usage(ctx context.Context) (*LimitStatus, error)
 }
 
 // ErrRateLimited is returned by Agency.RunAgent when the provider's usage has
@@ -79,12 +80,12 @@ var ErrRateLimited = errors.New("agents: rate-limit threshold reached")
 
 // ProviderUsage reads a provider's limit snapshot when it supports monitoring,
 // returning (nil, false, nil) when the provider has no queryable limit.
-func ProviderUsage(p Provider) (status *LimitStatus, supported bool, err error) {
+func ProviderUsage(ctx context.Context, p Provider) (status *LimitStatus, supported bool, err error) {
 	r, ok := p.(UsageReporter)
 	if !ok {
 		return nil, false, nil
 	}
-	s, err := r.Usage()
+	s, err := r.Usage(ctx)
 	return s, true, err
 }
 
@@ -92,11 +93,11 @@ func ProviderUsage(p Provider) (status *LimitStatus, supported bool, err error) 
 // provider reports usage at/over threshold. A missing snapshot or a provider
 // without UsageReporter is never blocking — monitoring only ever stops work on
 // a positive over-limit signal, never on absence of data.
-func checkLimit(p Provider, threshold float64) error {
+func checkLimit(ctx context.Context, p Provider, threshold float64) error {
 	if threshold <= 0 {
 		return nil
 	}
-	s, supported, err := ProviderUsage(p)
+	s, supported, err := ProviderUsage(ctx, p)
 	if !supported || err != nil || s == nil {
 		return nil
 	}

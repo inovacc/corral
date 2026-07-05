@@ -43,8 +43,8 @@ func NewProvider() *Provider { return &Provider{CLIProvider: New()} }
 // Usage satisfies corral.UsageReporter via the real Claude Code subscription
 // endpoint. A short timeout bounds the monitor; absence (not logged in) is
 // reported as (nil, nil) so it never blocks the fleet.
-func (p *Provider) Usage() (*corral.LimitStatus, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+func (p *Provider) Usage(ctx context.Context) (*corral.LimitStatus, error) {
+	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
 	return ReadUsage(ctx)
 }
