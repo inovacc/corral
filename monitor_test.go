@@ -3,7 +3,9 @@ package corral
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // stubProvider is a Provider that optionally reports usage.
@@ -23,7 +25,88 @@ func (s *stubProvider) Run(_ context.Context, _ RunRequest) (RunResult, error) {
 // usageStub adds the UsageReporter capability.
 type usageStub struct{ *stubProvider }
 
-func (u usageStub) Usage() (*LimitStatus, error) { return u.status, u.err }
+func (u usageStub) Usage(context.Context) (*LimitStatus, error) { return u.status, u.err }
+
+// ctxUsageStub blocks in Usage until the caller's ctx is cancelled, then reports
+// the ctx error — modeling a hung provider HTTP call. It proves checkLimit
+// threads the caller's ctx all the way into Usage (item #5).
+type ctxUsageStub struct {
+	*stubProvider
+	observed chan struct{}
+}
+
+func (c ctxUsageStub) Usage(ctx context.Context) (*LimitStatus, error) {
+	<-ctx.Done()
+	close(c.observed)
+	return nil, ctx.Err()
+}
+
+// blockingUsageProvider counts Usage calls and holds each one open until
+// released, so a test can prove a second concurrent probe coalesces onto the
+// first in-flight call rather than starting its own.
+type blockingUsageProvider struct {
+	*stubProvider
+	calls   int32
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (b *blockingUsageProvider) Usage(context.Context) (*LimitStatus, error) {
+	atomic.AddInt32(&b.calls, 1)
+	b.entered <- struct{}{} // signal this call is in flight
+	<-b.release             // hold it open so a concurrent joiner must coalesce
+	return &LimitStatus{Windows: []LimitWindow{{Name: "5h", UsedPercent: 10}}}, nil
+}
+
+func TestUsageGate_CoalescesConcurrentProbes(t *testing.T) {
+	b := &blockingUsageProvider{
+		stubProvider: &stubProvider{name: "x"},
+		entered:      make(chan struct{}, 1),
+		release:      make(chan struct{}),
+	}
+	var g usageGate
+
+	r1 := make(chan bool, 1)
+	go func() { _, sup, _ := g.probe(context.Background(), b); r1 <- sup }()
+	<-b.entered // probe #1 now holds g.inflight, blocked in Usage
+
+	// probe #2 arrives while #1 is in flight: it must join, NOT call Usage again.
+	r2 := make(chan bool, 1)
+	go func() { _, sup, _ := g.probe(context.Background(), b); r2 <- sup }()
+	// Let probe #2 reach the joiner wait, then unblock the shared in-flight call.
+	time.Sleep(50 * time.Millisecond)
+	close(b.release)
+
+	if !<-r1 || !<-r2 {
+		t.Fatal("both probes should report supported=true from the shared snapshot")
+	}
+	if n := atomic.LoadInt32(&b.calls); n != 1 {
+		t.Fatalf("coalescing failed: Usage called %d times for 2 concurrent probes, want 1", n)
+	}
+}
+
+func TestCheckLimit_HonorsContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled — Usage must return promptly, not hang forever
+	c := ctxUsageStub{stubProvider: &stubProvider{name: "hang"}, observed: make(chan struct{})}
+	done := make(chan error, 1)
+	go func() { done <- checkLimit(ctx, c, 80) }()
+	select {
+	case err := <-done:
+		// A ctx error during Usage must degrade to non-blocking (absence of data
+		// never blocks the fleet — only a positive over-limit signal does).
+		if err != nil {
+			t.Fatalf("ctx-cancelled Usage must degrade non-blocking, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("checkLimit hung on a cancelled ctx — ctx is not threaded through to Usage")
+	}
+	select {
+	case <-c.observed:
+	default:
+		t.Fatal("Usage never observed ctx cancellation")
+	}
+}
 
 func TestLimitStatusWorstAndOK(t *testing.T) {
 	s := &LimitStatus{Windows: []LimitWindow{{Name: "5h", UsedPercent: 40}, {Name: "weekly", UsedPercent: 96}}}
@@ -45,7 +128,7 @@ func TestLimitStatusWorstAndOK(t *testing.T) {
 }
 
 func TestProviderUsageUnsupported(t *testing.T) {
-	_, supported, err := ProviderUsage(&stubProvider{name: "bare"})
+	_, supported, err := ProviderUsage(context.Background(), &stubProvider{name: "bare"})
 	if supported || err != nil {
 		t.Errorf("bare provider: supported=%v err=%v", supported, err)
 	}

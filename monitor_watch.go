@@ -144,7 +144,7 @@ func (m *Monitor) Poll(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		s, err := w.r.Usage()
+		s, err := w.r.Usage(ctx)
 		smp := Sample{Provider: w.name, At: m.now()}
 		switch {
 		case err != nil:

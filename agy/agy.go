@@ -55,8 +55,8 @@ func (d *Driver) Name() string { return "agy" }
 // (POST cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary) using
 // the Google OAuth bearer in ~/.gemini/oauth_creds.json. See usage.go. Failures
 // (offline / not logged in) are non-blocking for the Agency monitor.
-func (d *Driver) Usage() (*corral.LimitStatus, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 13*time.Second)
+func (d *Driver) Usage(ctx context.Context) (*corral.LimitStatus, error) {
+	ctx, cancel := context.WithTimeout(ctx, 13*time.Second)
 	defer cancel()
 	return FetchUsage(ctx)
 }

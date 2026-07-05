@@ -20,7 +20,11 @@ func New() *corral.CLIProvider {
 		ProviderName: "grok",
 		Bin:          "grok",
 		PromptFlag:   "--single", // -p/--single <PROMPT>: single-turn, prints to stdout and exits
-		ModelFlag:    "--model",
+		// PromptStdin intentionally unset (item #9): grok's stdin handling for the
+		// prompt is unverified, so an oversized prompt errors loudly rather than
+		// emitting `--single` with no value. The proper fix is grok's documented
+		// `--prompt-file` flag (docs/kb/grok.md) once wired.
+		ModelFlag: "--model",
 		// SchemaFlag intentionally empty: grok's --json-schema takes inline JSON,
 		// not a file path, so schemas are embedded in the prompt and the JSON is
 		// parsed from stdout (as the claude preset does).
@@ -39,8 +43,8 @@ func NewProvider() *Provider { return &Provider{CLIProvider: New()} }
 // Usage satisfies corral.UsageReporter via the real Grok billing endpoint. A
 // short timeout bounds the monitor; absence (not logged in, offline, or a
 // billing error) is reported as (nil, nil) so it never blocks the fleet.
-func (p *Provider) Usage() (*corral.LimitStatus, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+func (p *Provider) Usage(ctx context.Context) (*corral.LimitStatus, error) {
+	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
 	return FetchUsage(ctx)
 }

@@ -13,7 +13,7 @@ type fakeReporter struct {
 	err  error
 }
 
-func (f *fakeReporter) Usage() (*LimitStatus, error) {
+func (f *fakeReporter) Usage(context.Context) (*LimitStatus, error) {
 	if f.err != nil {
 		return nil, f.err
 	}

@@ -21,7 +21,10 @@ func New() *corral.CLIProvider {
 		Bin:          "kimi",
 		BaseArgs:     []string{"--yolo"}, // -y/--yolo: auto-approve all actions
 		PromptFlag:   "--prompt",         // -p/--prompt <prompt>: run one prompt non-interactively and print
-		ModelFlag:    "--model",
+		// PromptStdin intentionally unset (item #9): kimi's stdin handling for the
+		// prompt is unverified, so an oversized prompt errors loudly rather than
+		// emitting `--prompt` with no value.
+		ModelFlag: "--model",
 	}
 }
 
@@ -37,8 +40,8 @@ func NewProvider() *Provider { return &Provider{CLIProvider: New()} }
 // GET {base}/usages with the OAuth bearer from ~/.kimi-code/credentials/. A
 // short timeout bounds the monitor; absence (not logged in, BYOK-only, or any
 // HTTP/decode error) is reported as (nil, nil) so it never blocks the fleet.
-func (p *Provider) Usage() (*corral.LimitStatus, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+func (p *Provider) Usage(ctx context.Context) (*corral.LimitStatus, error) {
+	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
 	return ReadUsage(ctx)
 }

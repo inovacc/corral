@@ -24,6 +24,7 @@ func New() *corral.CLIProvider {
 		DirFlag:      "-C",
 		SchemaFlag:   "--output-schema",
 		OutputFlag:   "-o",
+		PromptStdin:  true, // `codex exec` reads the prompt from stdin (verified)
 	}
 }
 
@@ -42,8 +43,8 @@ func NewProvider() *Provider { return &Provider{CLIProvider: New()} }
 // (the same call the CLI's /usage and /status make). If that call fails (offline
 // or not logged in), it falls back to the rate-limit headers the last /responses
 // turn persisted to ~/.codex/sessions — so monitoring still has data air-gapped.
-func (p *Provider) Usage() (*corral.LimitStatus, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 13*time.Second)
+func (p *Provider) Usage(ctx context.Context) (*corral.LimitStatus, error) {
+	ctx, cancel := context.WithTimeout(ctx, 13*time.Second)
 	defer cancel()
 	if s, err := FetchUsage(ctx); err == nil && s != nil {
 		return s, nil

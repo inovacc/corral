@@ -24,6 +24,7 @@ type CLIProvider struct {
 	ModelFlag    string   // flag selecting the model (e.g. "--model"); "" => no flag emitted
 	Model        string   // default model used when an Agent sets none (e.g. "claude-sonnet-4-6")
 	PromptFlag   string   // flag carrying the prompt as its VALUE (e.g. "--single","--prompt"); "" => prompt is a trailing positional arg
+	PromptStdin  bool     // CLI reads the prompt from stdin when it is NOT passed as an arg (verified: claude -p, codex exec). Required to deliver an oversized prompt; providers without it error loudly rather than emit a malformed call. See item #9.
 }
 
 func (p *CLIProvider) Name() string { return p.ProviderName }
@@ -78,6 +79,24 @@ func (p *CLIProvider) argv(req RunRequest, schemaPath, outPath, prompt string) (
 // and `codex exec` read the prompt from stdin, so large turns route there.
 const maxArgPrompt = 8000
 
+// promptDelivery decides how the prompt reaches the child process: as an argv
+// value (prompts within the command-line limit) or on stdin (oversized prompts,
+// only for providers whose CLI reads it there). An oversized prompt for a
+// provider that cannot take stdin is a loud error — NOT a silently dropped flag,
+// which would otherwise produce a malformed invocation (e.g. grok --single with
+// no value). See item #9. A future improvement is a per-provider prompt-file
+// flag (grok exposes `--prompt-file`), which sidesteps both the arg limit and
+// stdin entirely.
+func (p *CLIProvider) promptDelivery(prompt string) (argPrompt string, useStdin bool, err error) {
+	if len(prompt) <= maxArgPrompt {
+		return prompt, false, nil
+	}
+	if !p.PromptStdin {
+		return "", false, fmt.Errorf("%s: prompt is %d bytes, over the %d-byte command-line limit, and this provider does not read the prompt from stdin (item #9)", p.ProviderName, len(prompt), maxArgPrompt)
+	}
+	return "", true, nil
+}
+
 // Run executes one agent turn and returns its text (or raw JSON when a schema
 // was requested).
 func (p *CLIProvider) Run(ctx context.Context, req RunRequest) (RunResult, error) {
@@ -116,11 +135,11 @@ func (p *CLIProvider) Run(ctx context.Context, req RunRequest) (RunResult, error
 	}
 
 	// Feed an oversized prompt on stdin instead of as an argv entry to stay under
-	// the OS command-line length limit (Windows ~32 KB). The CLIs read stdin.
-	useStdin := len(prompt) > maxArgPrompt
-	argPrompt := prompt
-	if useStdin {
-		argPrompt = ""
+	// the OS command-line length limit (Windows ~32 KB) — but only for providers
+	// whose CLI reads stdin; others error rather than emit a malformed call.
+	argPrompt, useStdin, derr := p.promptDelivery(prompt)
+	if derr != nil {
+		return RunResult{}, derr
 	}
 	args, fromFile := p.argv(req, schemaPath, outPath, argPrompt)
 	cmd := exec.CommandContext(ctx, p.Bin, args...)
