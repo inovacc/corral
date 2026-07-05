@@ -40,11 +40,20 @@ func NewAgency(provider, dir string) (*Agency, error) {
 	if err != nil {
 		return nil, err
 	}
+	return NewAgencyWithProvider(p, dir), nil
+}
+
+// NewAgencyWithProvider builds an Agency around an already-constructed Provider
+// (e.g. an API backend from the apiprovider/ or openrouter/ packages, which take
+// per-call config that the name registry cannot supply). Warm sessions are
+// enabled only when the provider implements SessionOpener; one-shot API backends
+// run through Provider.Run directly.
+func NewAgencyWithProvider(p Provider, dir string) *Agency {
 	a := &Agency{Provider: p, Dir: dir, LimitThreshold: DefaultLimitThreshold}
 	if o, ok := p.(SessionOpener); ok {
 		a.pool = NewSessionPool(o)
 	}
-	return a, nil
+	return a
 }
 
 // LimitStatus reports the provider's current rate-limit snapshot, or
