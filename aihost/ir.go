@@ -14,7 +14,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 )
+
+var envNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 type AssetKind string
 
@@ -56,6 +59,25 @@ type Component struct {
 	MCP                       MCPSpec
 	Assets                    []Asset
 	Vendors                   []string
+	Executions                map[string]Execution
+}
+
+// Execution selects how a vendor's turns run: "subscription" (a coding-agent
+// CLI, the default) or "api" (a metered API backend). Absent ⇒ subscription.
+type Execution struct {
+	Mode   string          `json:"mode"`
+	Config ExecutionConfig `json:"config"`
+}
+
+// ExecutionConfig configures an "api" execution. KeyEnv is an environment
+// variable NAME (never a literal key); the generated code resolves it at
+// runtime via os.Getenv.
+type ExecutionConfig struct {
+	Format  string         `json:"format"`
+	Model   string         `json:"model"`
+	KeyEnv  string         `json:"key_env"`
+	BaseURL string         `json:"base_url"`
+	Routing map[string]any `json:"routing"`
 }
 
 func Load(path string) (*Component, error) {
@@ -71,8 +93,9 @@ func Load(path string) (*Component, error) {
 			Description string  `json:"description"`
 			MCP         MCPSpec `json:"mcp"`
 		} `json:"component"`
-		Vendors []string `json:"vendors"`
-		Assets  []Asset  `json:"assets"`
+		Vendors   []string             `json:"vendors"`
+		Assets    []Asset              `json:"assets"`
+		Execution map[string]Execution `json:"execution"`
 	}
 	if err := json.Unmarshal(raw, &s); err != nil {
 		return nil, fmt.Errorf("aihost: parse %s: %w", path, err)
@@ -80,8 +103,39 @@ func Load(path string) (*Component, error) {
 	if s.Component.Name == "" || s.Component.Module == "" {
 		return nil, fmt.Errorf("aihost: component.name and component.module are required")
 	}
+	for vendor, ex := range s.Execution {
+		if err := validateExecution(vendor, ex); err != nil {
+			return nil, err
+		}
+	}
 	return &Component{
 		Name: s.Component.Name, Module: s.Component.Module, Description: s.Component.Description,
-		MCP: s.Component.MCP, Assets: s.Assets, Vendors: s.Vendors,
+		MCP: s.Component.MCP, Assets: s.Assets, Vendors: s.Vendors, Executions: s.Execution,
 	}, nil
+}
+
+func validateExecution(vendor string, ex Execution) error {
+	switch ex.Mode {
+	case "", "subscription":
+		return nil
+	case "api":
+		// validated below
+	default:
+		return fmt.Errorf("aihost: vendor %q: unknown execution mode %q (want subscription|api)", vendor, ex.Mode)
+	}
+	switch ex.Config.Format {
+	case "openrouter", "openai", "anthropic":
+	default:
+		return fmt.Errorf("aihost: vendor %q: unknown api format %q (want openrouter|openai|anthropic)", vendor, ex.Config.Format)
+	}
+	if ex.Config.Model == "" {
+		return fmt.Errorf("aihost: vendor %q: api execution requires config.model", vendor)
+	}
+	if ex.Config.KeyEnv == "" {
+		return fmt.Errorf("aihost: vendor %q: api execution requires config.key_env", vendor)
+	}
+	if !envNameRe.MatchString(ex.Config.KeyEnv) {
+		return fmt.Errorf("aihost: vendor %q: config.key_env %q must be an environment-variable NAME, not a literal key", vendor, ex.Config.KeyEnv)
+	}
+	return nil
 }
