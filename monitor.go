@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -98,11 +99,59 @@ func checkLimit(ctx context.Context, p Provider, threshold float64) error {
 		return nil
 	}
 	s, supported, err := ProviderUsage(ctx, p)
-	if !supported || err != nil || s == nil {
+	return overLimit(s, supported, err, threshold)
+}
+
+// overLimit applies the threshold gate to a usage snapshot. A missing snapshot,
+// an unsupported provider, or a probe error is never blocking — only a positive
+// over-threshold reading withholds the turn.
+func overLimit(s *LimitStatus, supported bool, err error, threshold float64) error {
+	if threshold <= 0 || !supported || err != nil || s == nil {
 		return nil
 	}
 	if !s.OK(threshold) {
 		return fmt.Errorf("%w: %s (threshold %.0f%%)", ErrRateLimited, s.String(), threshold)
 	}
 	return nil
+}
+
+// usageGate coalesces concurrent usage probes so a fleet of N concurrent turns
+// fires at most one provider quota call at a time; callers that arrive while a
+// probe is in flight share its result instead of stampeding the endpoint. The
+// zero value is ready to use. (Pure-stdlib single-flight — the one-dep thesis
+// rules out golang.org/x/sync/singleflight.)
+type usageGate struct {
+	mu       sync.Mutex
+	inflight *usageProbe
+}
+
+type usageProbe struct {
+	done      chan struct{}
+	s         *LimitStatus
+	supported bool
+	err       error
+}
+
+// probe returns the provider's usage snapshot, coalescing concurrent callers
+// onto a single in-flight ProviderUsage call. The in-flight call runs under the
+// first caller's ctx; joiners share its result (a ctx error degrades
+// non-blocking for all, per the monitoring philosophy).
+func (g *usageGate) probe(ctx context.Context, p Provider) (*LimitStatus, bool, error) {
+	g.mu.Lock()
+	if pr := g.inflight; pr != nil {
+		g.mu.Unlock()
+		<-pr.done
+		return pr.s, pr.supported, pr.err
+	}
+	pr := &usageProbe{done: make(chan struct{})}
+	g.inflight = pr
+	g.mu.Unlock()
+
+	pr.s, pr.supported, pr.err = ProviderUsage(ctx, p)
+
+	g.mu.Lock()
+	g.inflight = nil
+	g.mu.Unlock()
+	close(pr.done)
+	return pr.s, pr.supported, pr.err
 }

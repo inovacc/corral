@@ -23,6 +23,10 @@ type Agency struct {
 	// before hitting a hard subscription wall instead of failing mid-turn. 0
 	// disables the gate. Only enforced when the provider implements UsageReporter.
 	LimitThreshold float64
+
+	// gate coalesces concurrent pre-run usage probes so a fleet of concurrent
+	// RunAgent calls fires at most one provider quota call at a time.
+	gate usageGate
 }
 
 // DefaultLimitThreshold is the used-percent at which the Agency stops
@@ -64,8 +68,13 @@ func (a *Agency) Run(ctx context.Context, agentName, input string) (RunResult, e
 // RunAgent executes a turn for an explicit Agent (not necessarily in the
 // roster), reusing a warm session when available.
 func (a *Agency) RunAgent(ctx context.Context, ag Agent, input string) (RunResult, error) {
-	if err := checkLimit(ctx, a.Provider, a.LimitThreshold); err != nil {
-		return RunResult{}, err
+	if a.LimitThreshold > 0 {
+		// Coalesce the pre-run quota probe: under a concurrent fleet this fires
+		// one provider usage call, not one per goroutine.
+		s, supported, err := a.gate.probe(ctx, a.Provider)
+		if lerr := overLimit(s, supported, err, a.LimitThreshold); lerr != nil {
+			return RunResult{}, lerr
+		}
 	}
 	req := RunRequest{Agent: ag, Input: input, Dir: a.Dir, Schema: ag.Schema}
 	if a.pool != nil {
