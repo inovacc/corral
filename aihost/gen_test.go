@@ -180,3 +180,83 @@ func TestWriteTree(t *testing.T) {
 		t.Fatalf("assets/agents/researcher.md not written: %v", err)
 	}
 }
+
+func componentGen(t *testing.T, files []GeneratedFile) string {
+	t.Helper()
+	for _, f := range files {
+		if filepath.ToSlash(f.Path) == "claude/component.gen.go" {
+			return string(f.Content)
+		}
+	}
+	t.Fatal("claude/component.gen.go not found")
+	return ""
+}
+
+func TestGenerate_APIExecutionEmitsBackend(t *testing.T) {
+	RegisterVendor(func() Vendor { return fakeClaudeVendor{} })
+	c := sampleComponent()
+	c.Executions = map[string]Execution{
+		"claude": {Mode: "api", Config: ExecutionConfig{
+			Format: "openrouter", Model: "anthropic/claude-sonnet-4", KeyEnv: "OPENROUTER_API_KEY",
+		}},
+	}
+	files, err := Generate(c, []string{"claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := componentGen(t, files)
+	for _, want := range []string{
+		`"github.com/inovacc/corral/openrouter"`,
+		"openrouter.New(openrouter.Config{",
+		`os.Getenv("OPENROUTER_API_KEY")`,
+		`Model:   "anthropic/claude-sonnet-4"`,
+		"corral.NewAgencyWithProvider(p,",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("component.gen.go missing %q\n---\n%s", want, src)
+		}
+	}
+	if strings.Contains(src, "sk-") {
+		t.Error("generated source must never contain a literal key")
+	}
+}
+
+func TestGenerate_SubscriptionUnchanged(t *testing.T) {
+	RegisterVendor(func() Vendor { return fakeClaudeVendor{} })
+	files, err := Generate(sampleComponent(), []string{"claude"}) // no Executions
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := componentGen(t, files)
+	if !strings.Contains(src, `corral.NewAgency(provider, ".")`) {
+		t.Errorf("subscription New() changed:\n%s", src)
+	}
+	if strings.Contains(src, "apiprovider") || strings.Contains(src, "openrouter.New") {
+		t.Error("subscription component must not import an api backend")
+	}
+}
+
+func TestGenerate_APIOpenAIUsesApiproviderPackage(t *testing.T) {
+	RegisterVendor(func() Vendor { return fakeClaudeVendor{} })
+	c := sampleComponent()
+	c.Executions = map[string]Execution{
+		"claude": {Mode: "api", Config: ExecutionConfig{
+			Format: "openai", Model: "gpt-4o", KeyEnv: "OPENAI_API_KEY",
+		}},
+	}
+	files, err := Generate(c, []string{"claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := componentGen(t, files)
+	for _, want := range []string{
+		`"github.com/inovacc/corral/apiprovider"`,
+		"apiprovider.New(apiprovider.Config{",
+		`Format:  "openai"`,
+		`os.Getenv("OPENAI_API_KEY")`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("component.gen.go missing %q\n---\n%s", want, src)
+		}
+	}
+}

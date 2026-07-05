@@ -129,7 +129,9 @@ type agentsGenData struct {
 }
 
 type componentGenData struct {
-	Vendor string
+	Vendor       string
+	ExtraImports string // extra import lines (api backends); "" for subscription
+	NewFunc      string // the full `func New(...) {...}` definition
 }
 
 type docGenData struct {
@@ -170,7 +172,10 @@ func moduleWrapperFiles(c *Component, vendor string) ([]GeneratedFile, error) {
 	}
 	out = append(out, GeneratedFile{Path: vendor + "/agents.gen.go", Content: agentsBuf})
 
-	compBuf, err := renderFormatted(componentGenTpl, componentGenData{Vendor: vendor})
+	extraImports, newFunc := executionCodegen(c.Module, vendor, c.Executions[vendor])
+	compBuf, err := renderFormatted(componentGenTpl, componentGenData{
+		Vendor: vendor, ExtraImports: extraImports, NewFunc: newFunc,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -189,6 +194,58 @@ func moduleWrapperFiles(c *Component, vendor string) ([]GeneratedFile, error) {
 	out = append(out, GeneratedFile{Path: vendor + "/README.md", Content: readmeBuf})
 
 	return out, nil
+}
+
+// executionCodegen returns the extra import line(s) and the New() function
+// source for a vendor's execution mode. A zero/subscription Execution yields
+// the existing name-registry path; an api Execution constructs the configured
+// backend and wraps it with corral.NewAgencyWithProvider.
+func executionCodegen(module, vendor string, ex Execution) (extraImports, newFunc string) {
+	_ = module // reserved for future per-module codegen; unused in the current backend selection
+	if ex.Mode != "api" {
+		return "", subscriptionNewFunc(vendor)
+	}
+	var pkgImport, ctorPkg, formatField string
+	// Select the backend package by format.
+	switch ex.Config.Format {
+	case "openrouter":
+		pkgImport = "\t\"github.com/inovacc/corral/openrouter\"\n"
+		ctorPkg = "openrouter"
+	default: // openai | anthropic
+		pkgImport = "\t\"github.com/inovacc/corral/apiprovider\"\n"
+		ctorPkg = "apiprovider"
+		formatField = fmt.Sprintf("\t\tFormat:  %q,\n", ex.Config.Format)
+	}
+	body := fmt.Sprintf(`// New returns a corral.Agency for the %q component, pinned at generation
+// time to an %q API backend (model %q). The provider argument is ignored in
+// api mode — the configured backend governs. The API key is read at runtime
+// from the %s environment variable and is never baked into this source.
+func New(provider string) (*corral.Agency, error) {
+	_ = provider
+	p, err := %s.New(%s.Config{
+%s		Model:   %q,
+		Key:     os.Getenv(%q),
+		BaseURL: %q,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return corral.NewAgencyWithProvider(p, "."), nil
+}
+`, vendor, ex.Config.Format, ex.Config.Model, ex.Config.KeyEnv,
+		ctorPkg, ctorPkg, formatField, ex.Config.Model, ex.Config.KeyEnv, ex.Config.BaseURL)
+	return pkgImport, body
+}
+
+func subscriptionNewFunc(vendor string) string {
+	return fmt.Sprintf(`// New returns a corral.Agency for the %q component, running against the
+// process's current working directory ("."). corral decides which registered
+// provider actually runs — pass the runtime provider name (e.g. "claude",
+// "codex", "agy", "grok", "kimi").
+func New(provider string) (*corral.Agency, error) {
+	return corral.NewAgency(provider, ".")
+}
+`, vendor)
 }
 
 var goModTpl = template.Must(template.New("go.mod").Parse(
@@ -229,24 +286,14 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-
+{{.ExtraImports}}
 	"github.com/inovacc/corral"
 )
 
 //go:embed all:assets
 var assetsFS embed.FS
 
-// New returns a corral.Agency for the "{{.Vendor}}" component, running
-// against the process's current working directory ("."). This component's
-// plugin tree was generated for the {{.Vendor}} host, but corral itself
-// decides which provider actually runs — pass whichever runtime provider
-// corral has registered (e.g. "claude", "codex", "agy", "grok", "kimi"; note
-// corral does not register a "gemini" provider yet, even though this
-// component's assets were generated for the gemini host).
-func New(provider string) (*corral.Agency, error) {
-	return corral.NewAgency(provider, ".")
-}
-
+{{.NewFunc}}
 // Install writes the embedded plugin tree under target, returning the number
 // of files written.
 func Install(target string) (int, error) {
