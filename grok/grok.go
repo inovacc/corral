@@ -20,7 +20,11 @@ func New() *corral.CLIProvider {
 		ProviderName: "grok",
 		Bin:          "grok",
 		PromptFlag:   "--single", // -p/--single <PROMPT>: single-turn, prints to stdout and exits
-		ModelFlag:    "--model",
+		// PromptStdin intentionally unset (item #9): grok's stdin handling for the
+		// prompt is unverified, so an oversized prompt errors loudly rather than
+		// emitting `--single` with no value. The proper fix is grok's documented
+		// `--prompt-file` flag (docs/kb/grok.md) once wired.
+		ModelFlag: "--model",
 		// SchemaFlag intentionally empty: grok's --json-schema takes inline JSON,
 		// not a file path, so schemas are embedded in the prompt and the JSON is
 		// parsed from stdout (as the claude preset does).

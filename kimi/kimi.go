@@ -21,7 +21,10 @@ func New() *corral.CLIProvider {
 		Bin:          "kimi",
 		BaseArgs:     []string{"--yolo"}, // -y/--yolo: auto-approve all actions
 		PromptFlag:   "--prompt",         // -p/--prompt <prompt>: run one prompt non-interactively and print
-		ModelFlag:    "--model",
+		// PromptStdin intentionally unset (item #9): kimi's stdin handling for the
+		// prompt is unverified, so an oversized prompt errors loudly rather than
+		// emitting `--prompt` with no value.
+		ModelFlag: "--model",
 	}
 }
 

@@ -24,6 +24,7 @@ func New() *corral.CLIProvider {
 		DirFlag:      "-C",
 		SchemaFlag:   "--output-schema",
 		OutputFlag:   "-o",
+		PromptStdin:  true, // `codex exec` reads the prompt from stdin (verified)
 	}
 }
 

@@ -29,6 +29,7 @@ func New() *corral.CLIProvider {
 		BaseArgs:     []string{"-p"},
 		ModelFlag:    "--model",
 		Model:        "claude-sonnet-4-6", // default; an Agent.Model hint overrides
+		PromptStdin:  true,                // `claude -p` reads the prompt from stdin (verified)
 	}
 }
 
