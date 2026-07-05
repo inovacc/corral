@@ -13,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/inovacc/corral"
@@ -119,17 +118,4 @@ func atoi(s string) (int, bool) {
 func newOpenAI(cfg Config) corral.Provider { return &openaiProvider{cfg: cfg, hc: defaultClient()} }
 func newAnthropic(cfg Config) corral.Provider {
 	return &anthropicProvider{cfg: cfg, hc: defaultClient()}
-}
-
-type anthropicProvider struct {
-	cfg     Config
-	hc      *http.Client
-	mu      sync.Mutex
-	lastLim *corral.LimitStatus
-}
-
-func (p *anthropicProvider) Name() string { return "anthropic" }
-
-func (p *anthropicProvider) Run(ctx context.Context, req corral.RunRequest) (corral.RunResult, error) {
-	return corral.RunResult{}, fmt.Errorf("anthropic: not implemented")
 }
