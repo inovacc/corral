@@ -1,5 +1,5 @@
 # AGENTS.md
-<!-- rev:002 -->
+<!-- rev:003 -->
 
 Canonical cross-tool contributor and agent instructions for **corral**
 (`github.com/inovacc/corral`) — a provider-abstracted Go runtime that drives
@@ -7,7 +7,7 @@ subscription coding-agent CLIs (Claude Code, Codex, Antigravity, Grok, Kimi)
 behind one `Provider` interface, with a warm `SessionPool`, rate-limit
 awareness, a pluggable provider registry, and a per-host plugin installer. The
 agent roster is caller-supplied; the library ships the machinery. Go 1.26.3,
-BSD-3-Clause, single external runtime dep (`github.com/UserExistsError/conpty`).
+BSD-3-Clause. Two external runtime deps (amended 2026-07-05, was one): `github.com/UserExistsError/conpty` (subscription CLI ConPTY driver) and `github.com/OpenRouterTeam/go-sdk` v0.5.9 (the `api` execution mode's OpenRouter backend — pulled in only when the `openrouter` subpackage is imported; Apache-2.0, beta, Go 1.25+). The hand-rolled `apiprovider` (OpenAI/Anthropic) backends add no further deps; a backend's SDK is imported only by its own provider package, so the core stays SDK-free.
 
 ## Build
 
