@@ -2,6 +2,7 @@ package corral
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,6 +26,7 @@ type CLIProvider struct {
 	Model        string   // default model used when an Agent sets none (e.g. "claude-sonnet-4-6")
 	PromptFlag   string   // flag carrying the prompt as its VALUE (e.g. "--single","--prompt"); "" => prompt is a trailing positional arg
 	PromptStdin  bool     // CLI reads the prompt from stdin when it is NOT passed as an arg (verified: claude -p, codex exec). Required to deliver an oversized prompt; providers without it error loudly rather than emit a malformed call. See item #9.
+	ImageFlag    string   // flag attaching a local image file for multimodal turns (e.g. codex "-i"), repeated per RunRequest.Images entry; "" => images ignored (the CLI reads them from Dir/prompt instead, e.g. Claude Code's Read tool).
 }
 
 func (p *CLIProvider) Name() string { return p.ProviderName }
@@ -54,6 +56,11 @@ func (p *CLIProvider) argv(req RunRequest, schemaPath, outPath, prompt string) (
 	}
 	if p.DirFlag != "" && req.Dir != "" {
 		args = append(args, p.DirFlag, req.Dir)
+	}
+	if p.ImageFlag != "" {
+		for _, img := range req.Images {
+			args = append(args, p.ImageFlag, img)
+		}
 	}
 	if schemaPath != "" && p.SchemaFlag != "" {
 		args = append(args, p.SchemaFlag, schemaPath)
@@ -159,6 +166,10 @@ func (p *CLIProvider) Run(ctx context.Context, req RunRequest) (RunResult, error
 
 	out, err := cmd.Output()
 	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && len(ee.Stderr) > 0 {
+			return RunResult{}, fmt.Errorf("%s run: %w: %s", p.ProviderName, err, strings.TrimSpace(string(ee.Stderr)))
+		}
 		return RunResult{}, fmt.Errorf("%s run: %w", p.ProviderName, err)
 	}
 

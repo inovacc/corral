@@ -38,3 +38,22 @@ func TestCLIProvider_PromptDelivery(t *testing.T) {
 		t.Errorf("error should name the provider and the stdin limitation: %v", err)
 	}
 }
+
+// TestCLIProvider_argvImages pins that a provider with an ImageFlag emits it once
+// per RunRequest.Images entry (codex needs `-i FILE` for vision), and that a
+// provider without an ImageFlag ignores images entirely.
+func TestCLIProvider_argvImages(t *testing.T) {
+	withFlag := &CLIProvider{ProviderName: "codex", BaseArgs: []string{"exec"}, ImageFlag: "-i"}
+	req := RunRequest{Images: []string{"/tmp/a.png", "/tmp/b.png"}}
+	args, _ := withFlag.argv(req, "", "", "prompt")
+	got := strings.Join(args, " ")
+	if !strings.Contains(got, "-i /tmp/a.png") || !strings.Contains(got, "-i /tmp/b.png") {
+		t.Fatalf("ImageFlag provider must emit -i per image; got %q", got)
+	}
+
+	noFlag := &CLIProvider{ProviderName: "claude", BaseArgs: []string{"-p"}} // ImageFlag ""
+	args2, _ := noFlag.argv(req, "", "", "prompt")
+	if strings.Contains(strings.Join(args2, " "), "/tmp/a.png") {
+		t.Fatalf("no-ImageFlag provider must ignore images; got %v", args2)
+	}
+}

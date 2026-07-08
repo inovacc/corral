@@ -4,10 +4,12 @@ import "context"
 
 // RunRequest is a single agent turn submitted to a Provider.
 type RunRequest struct {
-	Agent  Agent  // the agent definition (System prompt, model hint, schema)
-	Input  string // task input appended after the agent's System prompt
-	Dir    string // working directory the agent operates in (repo root)
-	Schema string // JSON Schema for structured output; overrides Agent.Schema when set
+	Agent  Agent    // the agent definition (System prompt, model hint, schema)
+	Input  string   // task input appended after the agent's System prompt
+	Dir    string   // working directory the agent operates in (repo root)
+	Schema string   // JSON Schema for structured output; overrides Agent.Schema when set
+	Images []string // optional local image file paths for multimodal turns; a
+	// provider with an ImageFlag attaches them (e.g. codex -i FILE), others ignore them.
 }
 
 // RunResult is a Provider's reply.
