@@ -3,6 +3,7 @@ module github.com/inovacc/corral
 go 1.26.3
 
 require (
+	github.com/OpenRouterTeam/go-sdk v0.5.9
 	github.com/UserExistsError/conpty v0.1.4
 	github.com/golangci/golangci-lint/v2 v2.12.2
 	github.com/goreleaser/goreleaser/v2 v2.16.0
@@ -423,6 +424,7 @@ require (
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spf13/viper v1.21.0 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
+	github.com/spyzhov/ajson v0.8.0 // indirect
 	github.com/ssgreg/nlreturn/v2 v2.2.1 // indirect
 	github.com/stbenjam/no-sprintf-host-port v0.3.1 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
